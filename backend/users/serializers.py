@@ -257,6 +257,23 @@ class UserWriteSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        request = self.context.get("request")
+
+        if (
+            self.instance
+            and request
+            and request.user.is_authenticated
+            and request.user.pk == self.instance.pk
+            and attrs.get("is_active") is False
+        ):
+            raise serializers.ValidationError(
+                {
+                    "is_active": (
+                        "No puedes desactivar tu propio usuario."
+                    )
+                }
+            )
+
         if self.instance is None and not attrs.get("password"):
             raise serializers.ValidationError(
                 {

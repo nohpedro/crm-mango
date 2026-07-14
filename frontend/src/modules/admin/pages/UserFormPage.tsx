@@ -10,6 +10,7 @@ import { getAdminErrorMessage, getFieldErrors } from '../components/AdminError'
 import { useListFilters } from '../hooks/useListFilters'
 import { useRoles, useUser, useUserMutations } from '../hooks/useAdminQueries'
 import { userSchema, type UserFormValues } from '../schemas/admin.schemas'
+import { useAuthStore } from '../../../store/authStore'
 
 const emptyValues: UserFormValues = {
   username: '',
@@ -24,6 +25,7 @@ const emptyValues: UserFormValues = {
 export function UserFormPage() {
   const { id } = useParams()
   const isEditing = Boolean(id)
+  const currentUserId = useAuthStore((state) => state.user?.id)
   const navigate = useNavigate()
   const userQuery = useUser(id)
   const { filters } = useListFilters()
@@ -55,6 +57,10 @@ export function UserFormPage() {
   }, [reset, userQuery.data])
 
   const onSubmit = (values: UserFormValues) => {
+    if (isEditing && id === currentUserId && values.is_active === false) {
+      setError('is_active', { message: 'No puedes desactivar tu propio usuario.' })
+      return
+    }
     if (!isEditing && !values.password) {
       setError('password', {
         message: 'La contraseña es obligatoria al crear un usuario.',
@@ -164,13 +170,26 @@ export function UserFormPage() {
             </select>
           </Field>
         </div>
-        <label className="mt-5 flex items-center gap-3 text-sm font-semibold text-slate-700">
+        <label className="mt-5 flex items-start gap-3 text-sm font-semibold text-slate-700">
           <input
             {...register('is_active')}
             type="checkbox"
-            className="size-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            disabled={isEditing && id === currentUserId}
+            className="mt-0.5 size-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
           />{' '}
-          Usuario activo
+          <span>
+            Usuario activo
+            {isEditing && id === currentUserId && (
+              <span className="mt-1 block text-xs font-normal text-slate-500">
+                Tu cuenta no se puede desactivar a sí misma.
+              </span>
+            )}
+            {errors.is_active?.message && (
+              <span role="alert" className="mt-1 block text-xs font-normal text-red-600">
+                {errors.is_active.message}
+              </span>
+            )}
+          </span>
         </label>
         <div className="mt-7">
           <AdminFormActions

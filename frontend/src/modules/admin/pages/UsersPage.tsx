@@ -1,17 +1,41 @@
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import { Search, UserPlus } from 'lucide-react'
+import { toast } from 'sonner'
 
+import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 import { PageHeading } from '../../../components/common/PageHeading'
 import { getAdminErrorMessage } from '../components/AdminError'
 import { AdminTable, Pagination } from '../components/AdminTable'
 import { useListFilters } from '../hooks/useListFilters'
 import { useUserMutations, useUsers } from '../hooks/useAdminQueries'
+import { useAuthStore } from '../../../store/authStore'
 
 export function UsersPage() {
   const { filters, update } = useListFilters()
+  const currentUserId = useAuthStore((state) => state.user?.id)
   const query = useUsers(filters)
   const { update: updateUser } = useUserMutations()
+  const [pendingUser, setPendingUser] = useState<{
+    id: string
+    activate: boolean
+    name: string
+  } | null>(null)
   const users = query.data?.results ?? []
+  const confirmUser = () => {
+    if (!pendingUser) return
+    void updateUser
+      .mutateAsync({ id: pendingUser.id, payload: { is_active: pendingUser.activate } })
+      .then(() =>
+        toast.success(
+          pendingUser.activate ? 'Usuario activado.' : 'Usuario desactivado.',
+        ),
+      )
+      .catch((error: unknown) =>
+        toast.error(getAdminErrorMessage(error, 'No se pudo actualizar el usuario.')),
+      )
+      .finally(() => setPendingUser(null))
+  }
 
   return (
     <>
@@ -110,19 +134,29 @@ export function UsersPage() {
                 >
                   Editar
                 </Link>
-                <button
-                  type="button"
-                  disabled={updateUser.isPending}
-                  onClick={() =>
-                    updateUser.mutate({
-                      id: user.id,
-                      payload: { is_active: !user.is_active },
-                    })
-                  }
-                  className="text-xs font-bold text-slate-500 hover:text-slate-800 disabled:opacity-50"
-                >
-                  {user.is_active ? 'Desactivar' : 'Activar'}
-                </button>
+                {user.id === currentUserId && user.is_active ? (
+                  <span
+                    title="No puedes desactivar tu propio usuario."
+                    className="text-xs font-semibold text-slate-400"
+                  >
+                    Tu cuenta
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={updateUser.isPending}
+                    onClick={() =>
+                      setPendingUser({
+                        id: user.id,
+                        activate: !user.is_active,
+                        name: user.full_name || user.username,
+                      })
+                    }
+                    className="text-xs font-bold text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                  >
+                    {user.is_active ? 'Desactivar' : 'Activar'}
+                  </button>
+                )}
               </div>
             </td>
           </tr>
@@ -135,6 +169,18 @@ export function UsersPage() {
           onPageChange={(page) => update({ page })}
         />
       )}
+      <ConfirmDialog
+        open={Boolean(pendingUser)}
+        title={
+          pendingUser?.activate ? '¿Activar este usuario?' : '¿Desactivar este usuario?'
+        }
+        description={`El cambio afectará el acceso de ${pendingUser?.name ?? 'esta persona'} al CRM.`}
+        confirmLabel={pendingUser?.activate ? 'Activar usuario' : 'Desactivar usuario'}
+        danger={pendingUser ? !pendingUser.activate : false}
+        pending={updateUser.isPending}
+        onClose={() => setPendingUser(null)}
+        onConfirm={confirmUser}
+      />
     </>
   )
 }

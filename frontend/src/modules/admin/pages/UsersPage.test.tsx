@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 import { adminUser } from '../../../test/factories'
 import { server } from '../../../test/server'
+import { useAuthStore } from '../../../store/authStore'
 import { UsersPage } from './UsersPage'
 
 describe('UsersPage', () => {
@@ -28,5 +29,25 @@ describe('UsersPage', () => {
     expect(screen.getByText('admin@idesem.com')).toBeInTheDocument()
     expect(screen.getByText('Administrador')).toBeInTheDocument()
     expect(screen.getByText(/1.*de 1/)).toBeInTheDocument()
+  })
+
+  it('no ofrece desactivar la cuenta actualmente autenticada', async () => {
+    useAuthStore.setState({ status: 'authenticated', user: adminUser })
+    server.use(
+      http.get('http://localhost:8000/api/v1/users/', () =>
+        HttpResponse.json({ count: 1, next: null, previous: null, results: [adminUser] }),
+      ),
+    )
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <UsersPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('Tu cuenta')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Desactivar' })).not.toBeInTheDocument()
   })
 })

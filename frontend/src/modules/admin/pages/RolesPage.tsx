@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import { Plus, Search } from 'lucide-react'
+import { toast } from 'sonner'
 
+import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 import { PageHeading } from '../../../components/common/PageHeading'
 import { getAdminErrorMessage } from '../components/AdminError'
 import { AdminTable, Pagination } from '../components/AdminTable'
@@ -11,7 +14,24 @@ export function RolesPage() {
   const { filters, update } = useListFilters()
   const query = useRoles(filters)
   const { update: updateRole } = useRoleMutations()
+  const [pendingRole, setPendingRole] = useState<{
+    id: string
+    activate: boolean
+    name: string
+  } | null>(null)
   const roles = query.data?.results ?? []
+  const confirmRole = () => {
+    if (!pendingRole) return
+    void updateRole
+      .mutateAsync({ id: pendingRole.id, payload: { is_active: pendingRole.activate } })
+      .then(() =>
+        toast.success(pendingRole.activate ? 'Rol activado.' : 'Rol desactivado.'),
+      )
+      .catch((error: unknown) =>
+        toast.error(getAdminErrorMessage(error, 'No se pudo actualizar el rol.')),
+      )
+      .finally(() => setPendingRole(null))
+  }
   return (
     <>
       <PageHeading
@@ -101,9 +121,10 @@ export function RolesPage() {
                   type="button"
                   disabled={updateRole.isPending}
                   onClick={() =>
-                    updateRole.mutate({
+                    setPendingRole({
                       id: role.id,
-                      payload: { is_active: !role.is_active },
+                      activate: !role.is_active,
+                      name: role.name,
                     })
                   }
                   className="text-xs font-bold text-slate-500 hover:text-slate-800 disabled:opacity-50"
@@ -122,6 +143,16 @@ export function RolesPage() {
           onPageChange={(page) => update({ page })}
         />
       )}
+      <ConfirmDialog
+        open={Boolean(pendingRole)}
+        title={pendingRole?.activate ? '¿Activar este rol?' : '¿Desactivar este rol?'}
+        description={`El cambio afectará el acceso de las personas que usan ${pendingRole?.name ?? 'este rol'}.`}
+        confirmLabel={pendingRole?.activate ? 'Activar rol' : 'Desactivar rol'}
+        danger={pendingRole ? !pendingRole.activate : false}
+        pending={updateRole.isPending}
+        onClose={() => setPendingRole(null)}
+        onConfirm={confirmRole}
+      />
     </>
   )
 }

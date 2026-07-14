@@ -5,6 +5,12 @@ import { RoleFormPage } from '../modules/admin/pages/RoleFormPage'
 import { RolesPage } from '../modules/admin/pages/RolesPage'
 import { UserFormPage } from '../modules/admin/pages/UserFormPage'
 import { UsersPage } from '../modules/admin/pages/UsersPage'
+import { ProductDetailPage } from '../modules/catalog/pages/ProductDetailPage'
+import { ProductFormPage } from '../modules/catalog/pages/ProductFormPage'
+import { ProductImagesPage } from '../modules/catalog/pages/ProductImagesPage'
+import { ProductsPage } from '../modules/catalog/pages/ProductsPage'
+import { ReferenceFormPage } from '../modules/catalog/pages/ReferenceFormPage'
+import { ReferenceListPage } from '../modules/catalog/pages/ReferenceListPage'
 import { LoginPage } from '../modules/auth/pages/LoginPage'
 import { DashboardPage } from '../modules/dashboard/pages/DashboardPage'
 import { ModulePlaceholderPage } from '../modules/shared/pages/ModulePlaceholderPage'
@@ -51,31 +57,10 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/dashboard" replace /> },
           { path: 'dashboard', element: <DashboardPage /> },
-          {
-            path: 'products',
-            element: placeholder(
-              'Productos',
-              'Consulta y administración del catálogo comercial.',
-            ),
-          },
-          {
-            path: 'products/:id',
-            element: placeholder(
-              'Detalle de producto',
-              'Información, inventario y precios del producto.',
-            ),
-          },
-          {
-            path: 'categories',
-            element: placeholder('Categorías', 'Organización del catálogo de productos.'),
-          },
-          {
-            path: 'price-levels',
-            element: placeholder(
-              'Niveles de precio',
-              'Configuración de niveles comerciales.',
-            ),
-          },
+          { path: 'products', element: <ProductsPage /> },
+          { path: 'products/:id', element: <ProductDetailPage /> },
+          { path: 'categories', element: <ReferenceListPage kind="category" /> },
+          { path: 'price-levels', element: <ReferenceListPage kind="price-level" /> },
           {
             path: 'inventory',
             element: placeholder(
@@ -103,20 +88,8 @@ const router = createBrowserRouter([
               { path: 'roles', element: <RolesPage /> },
               { path: 'roles/new', element: <RoleFormPage /> },
               { path: 'roles/:id/edit', element: <RoleFormPage /> },
-              {
-                path: 'products/new',
-                element: placeholder(
-                  'Nuevo producto',
-                  'Registro de información comercial del producto.',
-                ),
-              },
-              {
-                path: 'products/:id/edit',
-                element: placeholder(
-                  'Editar producto',
-                  'Actualización de la información del producto.',
-                ),
-              },
+              { path: 'products/new', element: <ProductFormPage /> },
+              { path: 'products/:id/edit', element: <ProductFormPage /> },
               {
                 path: 'products/:id/prices',
                 element: placeholder(
@@ -126,38 +99,20 @@ const router = createBrowserRouter([
               },
               {
                 path: 'products/:id/images',
-                element: placeholder(
-                  'Imágenes del producto',
-                  'Galería e imagen principal del producto.',
-                ),
+                element: <ProductImagesPage />,
               },
-              {
-                path: 'categories/new',
-                element: placeholder(
-                  'Nueva categoría',
-                  'Registro de una categoría comercial.',
-                ),
-              },
+              { path: 'categories/new', element: <ReferenceFormPage kind="category" /> },
               {
                 path: 'categories/:id/edit',
-                element: placeholder(
-                  'Editar categoría',
-                  'Actualización de una categoría comercial.',
-                ),
+                element: <ReferenceFormPage kind="category" />,
               },
               {
                 path: 'price-levels/new',
-                element: placeholder(
-                  'Nuevo nivel de precio',
-                  'Registro de un nivel comercial.',
-                ),
+                element: <ReferenceFormPage kind="price-level" />,
               },
               {
                 path: 'price-levels/:id/edit',
-                element: placeholder(
-                  'Editar nivel de precio',
-                  'Actualización del nivel comercial.',
-                ),
+                element: <ReferenceFormPage kind="price-level" />,
               },
               {
                 path: 'inventory/:id/edit',

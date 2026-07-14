@@ -211,10 +211,10 @@ class PriceLevelViewSet(
     ),
     destroy=extend_schema(
         tags=["Catálogo - Productos"],
-        summary="Eliminar lógicamente un producto",
+        summary="Archivar producto",
         responses={
             204: OpenApiResponse(
-                description="Producto eliminado lógicamente.",
+                description="Producto archivado.",
             ),
         },
     ),
@@ -270,7 +270,9 @@ class ProductViewSet(
             == "true"
         )
 
-        if not include_deleted:
+        # La acción de reactivación debe poder localizar productos archivados;
+        # el resto de operaciones mantiene ocultos los registros archivados.
+        if not include_deleted and self.action != "restore":
             queryset = queryset.filter(
                 deleted_at__isnull=True,
             )
@@ -414,8 +416,8 @@ class ProductViewSet(
             return Response(
                 {
                     "detail": (
-                        "El producto fue eliminado. "
-                        "Primero debe restaurarse."
+                        "El producto está archivado. "
+                        "Primero debe reactivarse."
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
@@ -441,7 +443,7 @@ class ProductViewSet(
 
     @extend_schema(
         tags=["Catálogo - Productos"],
-        summary="Restaurar producto eliminado",
+        summary="Reactivar producto archivado",
         request=None,
         responses={
             200: ProductDetailSerializer,

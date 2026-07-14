@@ -285,6 +285,30 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
         return super().create(validated_data)
 
+    def validate_image(self, value):
+        content_type = getattr(value, "content_type", "")
+        if content_type and content_type not in {
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+        }:
+            raise serializers.ValidationError(
+                "Solo se permiten imágenes JPG, PNG o WebP."
+            )
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError(
+                "La imagen no puede superar los 5 MB."
+            )
+        return value
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        image_url = data.get("image")
+        if request and image_url and not image_url.startswith("http"):
+            data["image"] = request.build_absolute_uri(image_url)
+        return data
+
     @transaction.atomic
     def update(self, instance, validated_data):
         product = validated_data.get(

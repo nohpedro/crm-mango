@@ -76,6 +76,18 @@ class AuthenticationAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["is_admin"])
 
+    def test_user_cannot_deactivate_itself(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.patch(
+            f"/api/v1/users/{self.user.pk}/",
+            {"is_active": False},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("is_active", response.data)
+
 
 class CorsConfigurationTests(APITestCase):
     @override_settings(CORS_ALLOWED_ORIGINS=["http://localhost:5173"])
