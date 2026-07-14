@@ -3,34 +3,34 @@ from django.contrib.auth.base_user import BaseUserManager
 
 class UserManager(BaseUserManager):
     """
-    Administrador personalizado para usuarios autenticados mediante correo.
+    Administrador de usuarios autenticados mediante nombre de usuario.
     """
 
     use_in_migrations = True
 
     def create_user(
         self,
-        email: str,
         username: str,
+        email: str,
         password: str | None = None,
         **extra_fields,
     ):
-        if not email:
-            raise ValueError(
-                "El correo electrónico es obligatorio."
-            )
-
         if not username:
             raise ValueError(
                 "El nombre de usuario es obligatorio."
             )
 
-        email = self.normalize_email(email).strip().lower()
+        if not email:
+            raise ValueError(
+                "El correo electrónico es obligatorio."
+            )
+
         username = username.strip()
+        email = self.normalize_email(email).strip().lower()
 
         user = self.model(
-            email=email,
             username=username,
+            email=email,
             **extra_fields,
         )
 
@@ -41,8 +41,8 @@ class UserManager(BaseUserManager):
 
     def create_superuser(
         self,
-        email: str,
         username: str,
+        email: str,
         password: str | None = None,
         **extra_fields,
     ):
@@ -61,8 +61,8 @@ class UserManager(BaseUserManager):
             )
 
         return self.create_user(
-            email=email,
             username=username,
+            email=email,
             password=password,
             **extra_fields,
         )

@@ -85,13 +85,6 @@ class Role(models.Model):
 
 
 class User(AbstractUser):
-    """
-    Usuario personalizado del CRM IDESEM.
-
-    Utiliza el correo electrónico como credencial principal.
-    También conserva un nombre de usuario único.
-    """
-
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -128,8 +121,8 @@ class User(AbstractUser):
         verbose_name="fecha de modificación",
     )
 
-    USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["username"]
+    USERNAME_FIELD = "username"
+    REQUIRED_FIELDS = ["email"]
 
     objects = UserManager()
 
@@ -137,15 +130,14 @@ class User(AbstractUser):
         ordering = [
             "first_name",
             "last_name",
-            "email",
+            "username",
         ]
-
         verbose_name = "usuario"
         verbose_name_plural = "usuarios"
 
     def save(self, *args, **kwargs):
-        self.email = self.email.strip().lower()
         self.username = self.username.strip()
+        self.email = self.email.strip().lower()
 
         super().save(*args, **kwargs)
 
@@ -153,6 +145,6 @@ class User(AbstractUser):
         full_name = self.get_full_name().strip()
 
         if full_name:
-            return f"{full_name} — {self.email}"
+            return f"{full_name} — {self.username}"
 
-        return self.email
+        return self.username
