@@ -217,7 +217,6 @@ class UserViewSet(viewsets.ModelViewSet):
 
 class LoginAPIView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []
 
     @extend_schema(
         tags=["Autenticación"],

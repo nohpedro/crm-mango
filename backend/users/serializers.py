@@ -137,6 +137,8 @@ class UserReadSerializer(serializers.ModelSerializer):
 
     full_name = serializers.SerializerMethodField()
 
+    is_admin = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = (
@@ -148,6 +150,7 @@ class UserReadSerializer(serializers.ModelSerializer):
             "full_name",
             "is_active",
             "is_staff",
+            "is_admin",
             "role",
             "last_login",
             "created_at",
@@ -156,6 +159,16 @@ class UserReadSerializer(serializers.ModelSerializer):
 
     def get_full_name(self, obj: User) -> str:
         return obj.get_full_name().strip()
+
+    def get_is_admin(self, obj: User) -> bool:
+        if obj.is_superuser:
+            return True
+
+        return bool(
+            obj.role
+            and obj.role.is_active
+            and obj.role.code == "ADMIN"
+        )
 
 
 class UserWriteSerializer(serializers.ModelSerializer):
