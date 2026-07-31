@@ -139,6 +139,8 @@ class UserReadSerializer(serializers.ModelSerializer):
 
     is_admin = serializers.SerializerMethodField()
 
+    permissions = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = (
@@ -151,6 +153,7 @@ class UserReadSerializer(serializers.ModelSerializer):
             "is_active",
             "is_staff",
             "is_admin",
+            "permissions",
             "role",
             "last_login",
             "created_at",
@@ -169,6 +172,19 @@ class UserReadSerializer(serializers.ModelSerializer):
             and obj.role.is_active
             and obj.role.code == "ADMIN"
         )
+
+    def get_permissions(self, obj: User) -> list[str]:
+        """Permisos efectivos que el frontend puede usar para mostrar funciones."""
+        if obj.is_superuser:
+            return ["*"]
+
+        permissions = set(obj.get_all_permissions())
+        if obj.role and obj.role.is_active:
+            permissions.update(
+                f"{permission.content_type.app_label}.{permission.codename}"
+                for permission in obj.role.permissions.select_related("content_type").all()
+            )
+        return sorted(permissions)
 
 
 class UserWriteSerializer(serializers.ModelSerializer):

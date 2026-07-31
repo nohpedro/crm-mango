@@ -1,9 +1,11 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import (
     Category,
     PriceLevel,
+    PriceTier,
     Product,
     ProductImage,
     ProductPrice,
@@ -88,6 +90,7 @@ class CategorySummarySerializer(serializers.ModelSerializer):
 
 
 class PriceLevelSerializer(serializers.ModelSerializer):
+    tiers = serializers.SerializerMethodField()
     class Meta:
         model = PriceLevel
         fields = (
@@ -95,6 +98,7 @@ class PriceLevelSerializer(serializers.ModelSerializer):
             "name",
             "code",
             "description",
+            "tiers",
             "is_active",
             "created_at",
             "updated_at",
@@ -154,6 +158,10 @@ class PriceLevelSerializer(serializers.ModelSerializer):
         return value
 
 
+    def get_tiers(self, obj):
+        return PriceTierSerializer(obj.tiers.all(), many=True).data
+
+
 class PriceLevelSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = PriceLevel
@@ -164,21 +172,98 @@ class PriceLevelSummarySerializer(serializers.ModelSerializer):
         )
 
 
+class PriceTierSerializer(serializers.ModelSerializer):
+    price_level_detail = PriceLevelSummarySerializer(source="price_level", read_only=True)
+    label = serializers.ReadOnlyField()
+    minimum_quantity = serializers.IntegerField(
+        min_value=1,
+        error_messages={
+            "required": "Ingresa la cantidad mínima.",
+            "invalid": "La cantidad mínima debe ser un número entero.",
+            "min_value": "La cantidad mínima debe ser mayor que cero.",
+        },
+    )
+
+    class Meta:
+        model = PriceTier
+        validators = []
+        fields = ("id", "price_level", "price_level_detail", "minimum_quantity", "label", "is_active", "created_at", "updated_at")
+        read_only_fields = ("id", "price_level_detail", "label", "created_at", "updated_at")
+
+    def validate(self, attrs):
+        price_level = attrs.get(
+            "price_level",
+            getattr(self.instance, "price_level", None),
+        )
+        minimum_quantity = attrs.get(
+            "minimum_quantity",
+            getattr(self.instance, "minimum_quantity", None),
+        )
+        if (
+            self.instance
+            and self.instance.minimum_quantity == 1
+            and minimum_quantity != 1
+        ):
+            raise serializers.ValidationError(
+                {"minimum_quantity": "El nivel x1 es obligatorio y no puede cambiarse."}
+            )
+        duplicate = PriceTier.objects.filter(
+            price_level=price_level,
+            minimum_quantity=minimum_quantity,
+        )
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError(
+                {
+                    "minimum_quantity": (
+                        "Ya existe un nivel con esa cantidad mínima."
+                    )
+                }
+            )
+        return attrs
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        previous_quantity = instance.minimum_quantity
+        tier = super().update(instance, validated_data)
+        if tier.minimum_quantity != previous_quantity:
+            ProductPrice.objects.filter(price_tier=tier).update(
+                minimum_quantity=tier.minimum_quantity,
+                updated_at=timezone.now(),
+            )
+        return tier
+
+
 class ProductPriceSerializer(serializers.ModelSerializer):
+    # These values are derived from price_tier for the new product-price flow.
+    price_level = serializers.PrimaryKeyRelatedField(
+        queryset=PriceLevel.objects.all(), required=False
+    )
+    minimum_quantity = serializers.IntegerField(min_value=1, required=False)
     price_level_detail = PriceLevelSummarySerializer(
         source="price_level",
         read_only=True,
     )
+    product_detail = serializers.SerializerMethodField()
+    price_tier_detail = PriceTierSerializer(source="price_tier", read_only=True)
 
     class Meta:
         model = ProductPrice
+        # La comprobación de unicidad se realiza tras derivar los campos desde
+        # price_tier dentro de validate().
+        validators = []
         fields = (
             "id",
             "product",
+            "product_detail",
             "price_level",
+            "price_tier",
+            "price_tier_detail",
             "price_level_detail",
             "minimum_quantity",
             "unit_price",
+            "discount_percent",
             "is_active",
             "valid_from",
             "valid_until",
@@ -186,16 +271,32 @@ class ProductPriceSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+        extra_kwargs = {
+            # Estos campos se conservan por compatibilidad con precios antiguos,
+            # pero el nuevo formulario solo envía el nivel por cantidad.
+            "price_level": {"required": False},
+            "minimum_quantity": {"required": False},
+        }
 
         read_only_fields = (
             "id",
             "price_level_detail",
+            "product_detail",
             "created_by",
             "created_at",
             "updated_at",
         )
 
+    def get_product_detail(self, obj):
+        return {"id": str(obj.product_id), "name": obj.product.name, "sku": obj.product.sku}
+
     def validate(self, attrs):
+        tier = attrs.get("price_tier")
+        if tier:
+            if not tier.is_active or not tier.price_level.is_active:
+                raise serializers.ValidationError({"price_tier": "El nivel seleccionado no está activo."})
+            attrs["price_level"] = tier.price_level
+            attrs["minimum_quantity"] = tier.minimum_quantity
         product = attrs.get(
             "product",
             getattr(self.instance, "product", None),
@@ -340,6 +441,7 @@ class ProductWriteSerializer(serializers.ModelSerializer):
             "sku",
             "barcode",
             "description",
+            "normal_unit_price",
             "is_active",
         )
 
@@ -451,6 +553,7 @@ class ProductListSerializer(serializers.ModelSerializer):
     total_stock = serializers.SerializerMethodField()
 
     available_stock = serializers.SerializerMethodField()
+    has_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -460,11 +563,13 @@ class ProductListSerializer(serializers.ModelSerializer):
             "sku",
             "barcode",
             "category",
+            "normal_unit_price",
             "is_active",
             "deleted_at",
             "primary_image",
             "total_stock",
             "available_stock",
+            "has_stock",
             "created_at",
             "updated_at",
         )
@@ -502,6 +607,9 @@ class ProductListSerializer(serializers.ModelSerializer):
             stock.available_quantity
             for stock in obj.stocks.all()
         )
+
+    def get_has_stock(self, obj):
+        return obj.stocks.exists()
 
 
 class ProductDetailSerializer(ProductListSerializer):

@@ -4,10 +4,14 @@ import type {
   Category,
   CatalogWriteRequest,
   PriceLevel,
+  PriceTier,
   ProductDetail,
   ProductFilters,
   ProductImage,
   ProductImageWriteRequest,
+  ProductPrice,
+  ProductPriceWriteRequest,
+  QuotationProductPrice,
   ProductSummary,
   ProductWriteRequest,
 } from '../types/catalog.types'
@@ -36,6 +40,20 @@ export const catalogService = {
     requestHandler.get<PaginatedResponse<PriceLevel>>('catalog/price-levels/', {
       params: { ...baseParams(filters), is_active: filters.is_active || undefined },
     }),
+  listPriceTiers: (params: Record<string, string | number | boolean | undefined>) =>
+    requestHandler.get<PaginatedResponse<PriceTier>>('catalog/price-tiers/', { params }),
+  createPriceTier: (payload: { price_level: string; minimum_quantity: number; is_active: boolean }) =>
+    requestHandler.post<PriceTier, typeof payload>('catalog/price-tiers/', payload),
+  updatePriceTier: (
+    id: string,
+    payload: Partial<Pick<PriceTier, 'minimum_quantity' | 'is_active'>>,
+  ) =>
+    requestHandler.patch<PriceTier, typeof payload>(
+      `catalog/price-tiers/${id}/`,
+      payload,
+    ),
+  deletePriceTier: (id: string) =>
+    requestHandler.delete<void>(`catalog/price-tiers/${id}/`),
   getPriceLevel: (id: string) =>
     requestHandler.get<PriceLevel>(`catalog/price-levels/${id}/`),
   createPriceLevel: (payload: CatalogWriteRequest) =>
@@ -61,6 +79,27 @@ export const catalogService = {
     }),
   getProduct: (id: string) =>
     requestHandler.get<ProductDetail>(`catalog/products/${id}/`),
+  getQuotationPrice: (
+    id: string,
+    params: { quantity: number; total_quantity: number; client?: string },
+  ) =>
+    requestHandler.get<QuotationProductPrice>(`catalog/products/${id}/quotation-price/`, {
+      params,
+    }),
+  createProductPrice: (payload: ProductPriceWriteRequest) =>
+    requestHandler.post<ProductPrice, ProductPriceWriteRequest>(
+      'catalog/product-prices/',
+      payload,
+    ),
+  updateProductPrice: (id: string, payload: Partial<ProductPriceWriteRequest>) =>
+    requestHandler.patch<ProductPrice, Partial<ProductPriceWriteRequest>>(
+      `catalog/product-prices/${id}/`,
+      payload,
+    ),
+  listProductPrices: (params: Record<string, string | number | boolean | undefined>) =>
+    requestHandler.get<PaginatedResponse<ProductPrice>>('catalog/product-prices/', {
+      params,
+    }),
   createProduct: (payload: ProductWriteRequest) =>
     requestHandler.post<ProductDetail, ProductWriteRequest>('catalog/products/', payload),
   updateProduct: (id: string, payload: Partial<ProductWriteRequest>) =>

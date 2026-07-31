@@ -1,4 +1,5 @@
 from django.contrib.auth.models import Permission
+from django.db.models import F, Q
 from drf_spectacular.utils import (
     OpenApiExample,
     OpenApiResponse,
@@ -11,8 +12,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from inventory.models import Stock
+from quotations.models import Quotation
 from .models import Role, User
-from .permissions import IsAdministrator
+from .permissions import HasRoleModelPermission, IsAdministrator
 from .serializers import (
     ErrorSerializer,
     LoginRequestSerializer,
@@ -215,6 +218,66 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserReadSerializer
 
 
+class SystemNotificationsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        is_admin = user.is_superuser or bool(
+            user.role and user.role.is_active and user.role.code == "ADMIN"
+        )
+
+        def can(permission):
+            return is_admin or HasRoleModelPermission._has_permission(
+                user,
+                permission,
+            )
+
+        items = []
+        if can("quotations.view_quotation"):
+            draft_count = Quotation.objects.filter(
+                status=Quotation.Status.DRAFT
+            ).count()
+            if draft_count:
+                items.append(
+                    {
+                        "id": "draft-quotations",
+                        "title": "Cotizaciones pendientes",
+                        "message": (
+                            f"{draft_count} "
+                            f"{'cotización' if draft_count == 1 else 'cotizaciones'} "
+                            "en borrador."
+                        ),
+                        "path": "/quotations/history?status=draft",
+                        "tone": "warning",
+                    }
+                )
+
+        if can("inventory.view_stock"):
+            low_stock_count = (
+                Stock.objects.annotate(
+                    available=F("quantity") - F("reserved_quantity")
+                )
+                .filter(available__lte=F("minimum_stock"))
+                .count()
+            )
+            if low_stock_count:
+                items.append(
+                    {
+                        "id": "low-stock",
+                        "title": "Productos con stock bajo",
+                        "message": (
+                            f"{low_stock_count} existencia"
+                            f"{'s' if low_stock_count != 1 else ''} requieren revisión."
+                        ),
+                        "path": "/inventory",
+                        "tone": "danger",
+                    }
+                )
+
+        return Response({"count": len(items), "items": items})
+
+
 class LoginAPIView(APIView):
     permission_classes = [AllowAny]
 
@@ -399,9 +462,30 @@ class PermissionListAPIView(APIView):
         },
     )
     def get(self, request):
+        # Solo se exponen permisos que representan funciones visibles del CRM.
+        # Los permisos internos de Django (sesiones, grupos, log, tokens, etc.)
+        # no son útiles para configurar un rol operativo.
+        user_facing_models = {
+            "clients": ("client", "clienttype"),
+            "inventory": ("stock", "stockmovement", "warehouse"),
+            "products": (
+                "category",
+                "pricelevel",
+                "pricetier",
+                "product",
+                "productimage",
+                "productprice",
+            ),
+            "quotations": ("quotation", "quotationitem"),
+            "users": ("role", "user"),
+        }
+        filters = Q()
+        for app_label, models in user_facing_models.items():
+            filters |= Q(content_type__app_label=app_label, content_type__model__in=models)
         permissions = (
             Permission.objects
             .select_related("content_type")
+            .filter(filters)
             .order_by(
                 "content_type__app_label",
                 "content_type__model",

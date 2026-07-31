@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 import { PageHeading } from '../../../components/common/PageHeading'
 import { AdminFormActions } from '../../admin/components/AdminFormActions'
 import { getAdminErrorMessage, getFieldErrors } from '../../admin/components/AdminError'
@@ -22,6 +23,7 @@ const empty: ProductFormValues = {
   sku: '',
   barcode: null,
   description: '',
+  normal_unit_price: 0,
   is_active: true,
 }
 
@@ -39,10 +41,11 @@ export function ProductFormPage() {
     ordering: 'name',
     page: 1,
   })
-  const { create, update } = useProductMutations()
+  const { create, update, delete: archive } = useProductMutations()
   const imageMutations = useProductImageMutations(id)
   const [selectedImages, setSelectedImages] = useState<File[]>([])
   const [imageError, setImageError] = useState('')
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false)
   const mutation = editing ? update : create
   const {
     register,
@@ -62,6 +65,7 @@ export function ProductFormPage() {
         sku: productQuery.data.sku,
         barcode: productQuery.data.barcode,
         description: productQuery.data.description,
+        normal_unit_price: Number(productQuery.data.normal_unit_price),
         is_active: productQuery.data.is_active,
       })
   }, [productQuery.data, reset])
@@ -110,6 +114,19 @@ export function ProductFormPage() {
         if (!Object.keys(fields).length)
           toast.error(getAdminErrorMessage(error, 'No se pudo guardar el producto.'))
       })
+  }
+  const archiveProduct = () => {
+    if (!id) return
+    void archive
+      .mutateAsync(id)
+      .then(() => {
+        toast.success('Producto archivado.')
+        navigate('/products')
+      })
+      .catch((error: unknown) =>
+        toast.error(getAdminErrorMessage(error, 'No se pudo archivar el producto.')),
+      )
+      .finally(() => setArchiveConfirmOpen(false))
   }
   if (productQuery.isLoading || categoriesQuery.isLoading)
     return (
@@ -170,6 +187,19 @@ export function ProductFormPage() {
               className={`${inputClass(Boolean(errors.description))} resize-y`}
             />
           </Field>
+          <Field
+            label="Precio de venta normal (nivel x1) (Bs)"
+            error={errors.normal_unit_price?.message}
+            required
+          >
+            <input
+              {...register('normal_unit_price', { valueAsNumber: true })}
+              type="number"
+              min="0"
+              step="0.01"
+              className={inputClass(Boolean(errors.normal_unit_price))}
+            />
+          </Field>
           <label className="flex items-start gap-3 pt-7 text-sm font-semibold text-slate-700">
             <input
               {...register('is_active')}
@@ -177,6 +207,11 @@ export function ProductFormPage() {
               className="mt-0.5 size-4 rounded border-slate-300 text-brand-600"
             />{' '}
             Producto activo
+            {editing && (
+              <span className="block text-xs font-normal text-slate-500">
+                Desmárcalo para desactivar el producto.
+              </span>
+            )}
           </label>
         </div>
         <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4">
@@ -242,7 +277,33 @@ export function ProductFormPage() {
             label={editing ? 'Guardar cambios' : 'Crear producto'}
           />
         </div>
+        {editing && !productQuery.data?.deleted_at && (
+          <div className="mt-5 border-t border-red-100 pt-5">
+            <p className="text-sm font-semibold text-slate-700">Archivar producto</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Lo oculta del catálogo activo sin eliminar su información. Podrás restaurarlo
+              desde el detalle del producto.
+            </p>
+            <button
+              type="button"
+              onClick={() => setArchiveConfirmOpen(true)}
+              className="mt-3 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50"
+            >
+              Archivar producto
+            </button>
+          </div>
+        )}
       </form>
+      <ConfirmDialog
+        open={archiveConfirmOpen}
+        title="¿Archivar este producto?"
+        description="El producto dejará de aparecer en el catálogo activo. Podrás restaurarlo después desde su detalle."
+        confirmLabel="Archivar producto"
+        danger
+        pending={archive.isPending}
+        onClose={() => setArchiveConfirmOpen(false)}
+        onConfirm={archiveProduct}
+      />
     </>
   )
 }

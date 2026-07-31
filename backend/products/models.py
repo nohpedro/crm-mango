@@ -134,9 +134,32 @@ class PriceLevel(models.Model):
         self.code = self.code.strip().upper()
 
         super().save(*args, **kwargs)
+        PriceTier.objects.get_or_create(price_level=self, minimum_quantity=1)
 
     def __str__(self) -> str:
         return self.name
+
+
+class PriceTier(models.Model):
+    """Escalón de cantidad de un tipo de precio (x1, x3, x6, etc.)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    price_level = models.ForeignKey(PriceLevel, on_delete=models.CASCADE, related_name="tiers")
+    minimum_quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["price_level__name", "minimum_quantity"]
+        constraints = [models.UniqueConstraint(fields=["price_level", "minimum_quantity"], name="unique_price_tier_quantity")]
+
+    @property
+    def label(self):
+        return f"{self.price_level.name} x{self.minimum_quantity}"
+
+    def __str__(self):
+        return self.label
 
 
 class Product(models.Model):
@@ -180,6 +203,14 @@ class Product(models.Model):
     description = models.TextField(
         blank=True,
         verbose_name="descripción",
+    )
+
+    normal_unit_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name="precio de venta normal",
     )
 
     is_active = models.BooleanField(
@@ -380,6 +411,15 @@ class ProductPrice(models.Model):
         verbose_name="nivel de precio",
     )
 
+    price_tier = models.ForeignKey(
+        PriceTier,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="product_prices",
+        verbose_name="nivel por cantidad",
+    )
+
     minimum_quantity = models.PositiveIntegerField(
         validators=[
             MinValueValidator(1),
@@ -394,6 +434,14 @@ class ProductPrice(models.Model):
             MinValueValidator(0),
         ],
         verbose_name="precio unitario",
+    )
+
+    discount_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name="descuento informativo (%)",
     )
 
     is_active = models.BooleanField(

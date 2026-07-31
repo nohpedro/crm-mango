@@ -43,6 +43,8 @@ INSTALLED_APPS = [
     "django_filters",
     "products.apps.ProductsConfig",
     "inventory.apps.InventoryConfig",
+    "clients.apps.ClientsConfig",
+    "quotations.apps.QuotationsConfig",
 ]
 
 AUTH_USER_MODEL = "users.User"

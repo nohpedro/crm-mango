@@ -151,6 +151,7 @@ export function ReferenceListPage({ kind }: ReferenceListPageProps) {
                 >
                   Editar
                 </Link>
+                {!isCategory && <Link to={`/price-levels/${row.id}/rules`} className="text-xs font-bold text-brand-600 hover:text-brand-800">Niveles</Link>}
                 <button
                   type="button"
                   disabled={mutation.isPending}

@@ -8,6 +8,7 @@ from .views import (
     PermissionListAPIView,
     RefreshAPIView,
     RoleViewSet,
+    SystemNotificationsAPIView,
     UserViewSet,
 )
 
@@ -52,6 +53,11 @@ urlpatterns = [
         "permissions/",
         PermissionListAPIView.as_view(),
         name="permission-list",
+    ),
+    path(
+        "notifications/",
+        SystemNotificationsAPIView.as_view(),
+        name="system-notifications",
     ),
     path(
         "",

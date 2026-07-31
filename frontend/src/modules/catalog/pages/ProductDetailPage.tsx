@@ -1,20 +1,21 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useState } from 'react'
-import { ArrowLeft, Edit3, ImageOff, RotateCcw } from 'lucide-react'
+import { ArrowLeft, DollarSign, Edit3, ImageOff, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PageHeading } from '../../../components/common/PageHeading'
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { useProduct, useProductMutations } from '../hooks/useCatalogQueries'
+import { ProductPricesModal } from '../components/ProductPricesModal'
 
 export function ProductDetailPage() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const query = useProduct(id)
   const mutations = useProductMutations()
+  const [pricesOpen, setPricesOpen] = useState(false)
   const [pendingAction, setPendingAction] = useState<{
-    action: 'activate' | 'deactivate' | 'delete' | 'restore'
+    action: 'restore'
     label: string
     title: string
     description: string
@@ -33,34 +34,23 @@ export function ProductDetailPage() {
     )
   const product = query.data
   const runAction = (
-    action: 'activate' | 'deactivate' | 'delete' | 'restore',
+    action: 'restore',
     label: string,
   ) => {
-    const isArchive = action === 'delete'
     setPendingAction({
       action,
       label,
-      title: isArchive ? '¿Archivar este producto?' : `¿${label} este producto?`,
-      description: isArchive
-        ? 'El producto dejará de aparecer en el catálogo activo. Podrás recuperarlo después desde los productos archivados.'
-        : `Se va a ${label.toLowerCase()} el producto seleccionado.`,
+      title: `¿${label} este producto?`,
+      description: `Se va a ${label.toLowerCase()} el producto seleccionado.`,
     })
   }
   const confirmAction = () => {
     if (!pendingAction) return
     const { action } = pendingAction
-    const successMessage = {
-      activate: 'Producto activado.',
-      deactivate: 'Producto desactivado.',
-      delete: 'Producto archivado.',
-      restore: 'Producto restaurado.',
-    }[action]
+    const successMessage = 'Producto restaurado.'
     void mutations[action]
       .mutateAsync(product.id)
-      .then(() => {
-        toast.success(successMessage)
-        if (action === 'delete') navigate('/products')
-      })
+      .then(() => toast.success(successMessage))
       .catch((error: unknown) =>
         toast.error(getAdminErrorMessage(error, 'No se pudo completar la operación.')),
       )
@@ -129,6 +119,12 @@ export function ProductDetailPage() {
               </p>
               <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-5">
                 <div>
+                  <dt className="text-xs text-slate-400">Precio normal</dt>
+                  <dd className="mt-1 text-lg font-bold text-brand-700">
+                    Bs {Number(product.normal_unit_price).toFixed(2)}
+                  </dd>
+                </div>
+                <div>
                   <dt className="text-xs text-slate-400">Stock físico</dt>
                   <dd className="mt-1 text-lg font-bold text-slate-800">
                     {product.total_stock}
@@ -159,42 +155,16 @@ export function ProductDetailPage() {
               >
                 <RotateCcw className="size-4" /> Restaurar producto
               </button>
-            ) : (
-              <>
-                {product.is_active ? (
-                  <button
-                    type="button"
-                    onClick={() => runAction('deactivate', 'Desactivar')}
-                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    Desactivar producto
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => runAction('activate', 'Activar')}
-                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    Activar producto
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => runAction('delete', 'Archivar')}
-                  className="rounded-xl border border-red-200 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-50"
-                >
-                  Archivar producto
-                </button>
-              </>
-            )}
+            ) : null}
           </div>
           <div className="mt-6 border-t border-slate-100 pt-5">
-            <Link
-              to={`/products/${product.id}/prices`}
-              className="block text-sm font-bold text-brand-600 hover:text-brand-800"
+            <button
+              type="button"
+              onClick={() => setPricesOpen(true)}
+              className="inline-flex items-center gap-2 text-sm font-bold text-brand-600 hover:text-brand-800"
             >
-              Administrar precios →
-            </Link>
+              <DollarSign className="size-4" /> Precios
+            </button>
             <Link
               to={`/products/${product.id}/images`}
               className="mt-3 block text-sm font-bold text-brand-600 hover:text-brand-800"
@@ -209,11 +179,12 @@ export function ProductDetailPage() {
         title={pendingAction?.title ?? ''}
         description={pendingAction?.description ?? ''}
         confirmLabel={pendingAction?.label ?? 'Confirmar'}
-        danger={pendingAction?.action === 'delete'}
+        danger={false}
         pending={Object.values(mutations).some((mutation) => mutation.isPending)}
         onClose={() => setPendingAction(null)}
         onConfirm={confirmAction}
       />
+      {pricesOpen && <ProductPricesModal product={product} onClose={() => setPricesOpen(false)} />}
     </>
   )
 }

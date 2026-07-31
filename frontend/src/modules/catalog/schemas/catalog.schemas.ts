@@ -12,6 +12,7 @@ export const productSchema = z.object({
   sku: z.string().trim().min(1, 'El SKU es obligatorio.').max(80),
   barcode: z.string().trim().max(100).nullable(),
   description: z.string().trim().max(5000),
+  normal_unit_price: z.number().min(0, 'El precio no puede ser negativo.'),
   is_active: z.boolean(),
 })
 export type CatalogWriteValues = z.infer<typeof catalogWriteSchema>

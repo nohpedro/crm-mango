@@ -14,6 +14,7 @@ export interface User {
   is_active: boolean
   is_staff: boolean
   is_admin: boolean
+  permissions: string[]
   role: RoleSummary | null
   last_login: string | null
   created_at: string

@@ -25,6 +25,15 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* La cuadrícula de cotizaciones es interna: no se expone como columnas al operador. */
+div[class~="top-[88px]"][class~="z-30"] {
+  display: none;
+}
+
+div[class~="cursor-col-resize"] {
+  display: none;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -42,6 +51,13 @@ textarea {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+.sidebar-navigation {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.sidebar-navigation::-webkit-scrollbar {
+  display: none;
 }
 :focus-visible {
   outline: 3px solid rgb(88 123 214 / 35%);

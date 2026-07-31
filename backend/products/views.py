@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from drf_spectacular.utils import (
@@ -14,12 +15,13 @@ from rest_framework import (
 from rest_framework.decorators import action
 from rest_framework.parsers import (
     FormParser,
+    JSONParser,
     MultiPartParser,
 )
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from users.permissions import IsAdministrator
+from clients.models import Client
+from users.permissions import HasRoleModelPermission
 
 from .filters import (
     ProductFilter,
@@ -28,6 +30,7 @@ from .filters import (
 from .models import (
     Category,
     PriceLevel,
+    PriceTier,
     Product,
     ProductImage,
     ProductPrice,
@@ -35,6 +38,7 @@ from .models import (
 from .serializers import (
     CategorySerializer,
     PriceLevelSerializer,
+    PriceTierSerializer,
     ProductDetailSerializer,
     ProductImageSerializer,
     ProductListSerializer,
@@ -45,21 +49,11 @@ from .serializers import (
 
 class CatalogPermissionMixin:
     """
-    Los usuarios autenticados pueden consultar.
-    Solo administradores pueden modificar.
+    Aplica los permisos funcionales asignados al rol del usuario.
     """
 
     def get_permissions(self):
-        safe_actions = {
-            "list",
-            "retrieve",
-            "applicable_price",
-        }
-
-        if self.action in safe_actions:
-            return [IsAuthenticated()]
-
-        return [IsAdministrator()]
+        return [HasRoleModelPermission()]
 
 
 @extend_schema_view(
@@ -170,6 +164,25 @@ class PriceLevelViewSet(
         "head",
         "options",
     ]
+
+
+class PriceTierViewSet(CatalogPermissionMixin, viewsets.ModelViewSet):
+    queryset = PriceTier.objects.select_related("price_level").all()
+    serializer_class = PriceTierSerializer
+    filterset_fields = ["price_level", "is_active"]
+    ordering_fields = ["minimum_quantity", "created_at"]
+    ordering = ["price_level__name", "minimum_quantity"]
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        tier = self.get_object()
+        if tier.minimum_quantity == 1:
+            return Response({"detail": "El nivel x1 es obligatorio y no puede eliminarse."}, status=status.HTTP_400_BAD_REQUEST)
+        # Los precios especiales dependen del nivel por cantidad. Al retirar el
+        # nivel, se eliminan con él para que ningún producto conserve una regla
+        # que ya no puede aplicarse.
+        tier.product_prices.all().delete()
+        return super().destroy(request, *args, **kwargs)
 
 
 @extend_schema_view(
@@ -566,6 +579,94 @@ class ProductViewSet(
             ProductPriceSerializer(price).data
         )
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="quantity",
+                type=int,
+                required=True,
+                description="Cantidad de este producto en la cotización.",
+            ),
+            OpenApiParameter(
+                name="total_quantity",
+                type=int,
+                required=True,
+                description=(
+                    "Suma de las unidades de todos los productos. "
+                    "Esta cantidad define el nivel de precio aplicable."
+                ),
+            ),
+            OpenApiParameter(
+                name="client",
+                type=str,
+                required=False,
+                description="UUID del cliente cuyo nivel de precio se aplicará.",
+            ),
+        ],
+        responses={200: OpenApiResponse(description="Precio calculado para la cotización.")},
+    )
+    @action(detail=True, methods=["get"], url_path="quotation-price")
+    def quotation_price(self, request, pk=None):
+        """Devuelve el precio que debe mostrar el cotizador."""
+        product = self.get_object()
+        try:
+            quantity = int(request.query_params.get("quantity", "1"))
+            total_quantity = int(
+                request.query_params.get("total_quantity", quantity)
+            )
+        except ValueError:
+            quantity = 0
+            total_quantity = 0
+        if quantity < 1 or total_quantity < 1:
+            return Response(
+                {
+                    "detail": (
+                        "La cantidad del producto y la cantidad total "
+                        "deben ser mayores a cero."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if total_quantity < quantity:
+            return Response(
+                {
+                    "detail": (
+                        "La cantidad total de la cotización no puede ser "
+                        "menor que la cantidad del producto."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        client = None
+        price_level_id = request.query_params.get("price_level")
+        client_id = request.query_params.get("client")
+        if client_id:
+            client = Client.objects.filter(pk=client_id, is_active=True).select_related("price_level").first()
+            if client:
+                price_level_id = str(client.price_level_id)
+        level = client.price_level if client else (PriceLevel.objects.filter(pk=price_level_id, is_active=True).first() if price_level_id else None)
+        tier = PriceTier.objects.filter(
+            price_level=level,
+            minimum_quantity__lte=total_quantity,
+            is_active=True,
+        ).order_by("-minimum_quantity").first() if level else None
+        # El nivel x1 siempre usa el precio de venta normal del producto. Solo los
+        # niveles superiores representan precios especiales por cantidad.
+        price = ProductPrice.objects.filter(product=product, price_tier=tier, is_active=True).order_by("-updated_at").first() if tier and tier.minimum_quantity > 1 else None
+        normal_price = product.normal_unit_price
+        final_price = price.unit_price if price else normal_price
+        return Response({
+            "product": str(product.id), "quantity": quantity,
+            "total_quantity": total_quantity, "normal_unit_price": normal_price,
+            "special_unit_price": price.unit_price if price else None,
+            "final_unit_price": final_price,
+            "price_level": {"id": str(level.id), "name": level.name, "code": level.code} if level else None,
+            "minimum_quantity": tier.minimum_quantity if tier else None,
+            "price_tier": {"id": str(tier.id), "label": tier.label} if tier else None,
+            "discount_percent": 0,
+            "savings_per_unit": normal_price - final_price,
+        })
+
 
 @extend_schema_view(
     list=extend_schema(
@@ -676,6 +777,7 @@ class ProductImageViewSet(
     parser_classes = [
         MultiPartParser,
         FormParser,
+        JSONParser,
     ]
 
     filterset_fields = [

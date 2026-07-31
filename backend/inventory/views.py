@@ -7,10 +7,9 @@ from rest_framework import (
     status,
     viewsets,
 )
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from users.permissions import IsAdministrator
+from users.permissions import HasRoleModelPermission
 
 from .filters import (
     StockFilter,
@@ -33,15 +32,7 @@ from .serializers import (
 
 class InventoryPermissionMixin:
     def get_permissions(self):
-        safe_actions = {
-            "list",
-            "retrieve",
-        }
-
-        if self.action in safe_actions:
-            return [IsAuthenticated()]
-
-        return [IsAdministrator()]
+        return [HasRoleModelPermission()]
 
 
 @extend_schema_view(

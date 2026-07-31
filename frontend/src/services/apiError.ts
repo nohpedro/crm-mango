@@ -37,6 +37,9 @@ export function normalizeApiError(error: unknown): ApiError {
 
   const isNetworkError = !error.response
   const message =
+    (status === 415
+      ? 'No se pudo procesar la información enviada. Inténtalo nuevamente.'
+      : undefined) ??
     detail ??
     nonFieldErrors[0] ??
     Object.values(fieldErrors)[0]?.[0] ??

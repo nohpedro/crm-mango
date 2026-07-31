@@ -54,7 +54,7 @@ describe('RoleFormPage', () => {
 
     await user.type(await screen.findByLabelText(/nombre/i), 'Comercial')
     await user.type(screen.getByLabelText(/código/i), 'sales')
-    await user.click(screen.getByLabelText(/can add user/i))
+    await user.click(await screen.findByRole('button', { name: 'Crear' }))
     await user.click(screen.getByRole('button', { name: /crear rol/i }))
 
     expect(await screen.findByText('Roles')).toBeInTheDocument()

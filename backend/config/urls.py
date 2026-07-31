@@ -51,6 +51,16 @@ urlpatterns = [
         "api/v1/inventory/",
         include("inventory.urls"),
     ),
+
+    path(
+        "api/v1/clients/",
+        include("clients.urls"),
+    ),
+
+    path(
+        "api/v1/quotations/",
+        include("quotations.urls"),
+    ),
 ]
 
 

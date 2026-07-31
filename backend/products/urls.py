@@ -4,9 +4,16 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     CategoryViewSet,
     PriceLevelViewSet,
+    PriceTierViewSet,
     ProductImageViewSet,
     ProductPriceViewSet,
     ProductViewSet,
+)
+from .transfer import (
+    ProductExportView,
+    ProductImportView,
+    ProductReportView,
+    ProductTemplateView,
 )
 
 
@@ -22,6 +29,12 @@ router.register(
     "price-levels",
     PriceLevelViewSet,
     basename="price-level",
+)
+
+router.register(
+    "price-tiers",
+    PriceTierViewSet,
+    basename="price-tier",
 )
 
 router.register(
@@ -44,6 +57,10 @@ router.register(
 
 
 urlpatterns = [
+    path("template/", ProductTemplateView.as_view()),
+    path("export/", ProductExportView.as_view()),
+    path("import/", ProductImportView.as_view()),
+    path("report/", ProductReportView.as_view()),
     path(
         "",
         include(router.urls),

@@ -10,6 +10,7 @@ export const adminUser: User = {
   is_active: true,
   is_staff: true,
   is_admin: true,
+  permissions: ['*'],
   role: {
     id: '2f223d83-076d-401b-935e-d98600ce2385',
     name: 'Administrador',

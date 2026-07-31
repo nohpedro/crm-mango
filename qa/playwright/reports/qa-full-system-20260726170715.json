@@ -1,0 +1,236 @@
+{
+  "runId": "20260726170715",
+  "startedAt": "2026-07-26T17:07:15.748Z",
+  "finishedAt": "2026-07-26T17:07:51.391Z",
+  "frontendUrl": "http://localhost:5173",
+  "apiUrl": "http://localhost:8000/api/v1",
+  "headless": true,
+  "status": "APROBADO",
+  "totals": {
+    "executed": 20,
+    "passed": 20,
+    "failed": 0
+  },
+  "testData": {
+    "runId": "20260726170715",
+    "category": {
+      "name": "QA Herramientas 0726170715",
+      "code": "QACAT0726170715",
+      "id": "e77cdf2a-bbad-401b-a11d-a8533260a331"
+    },
+    "priceLevel": {
+      "name": "QA Preferencial 0726170715",
+      "code": "QAPL0726170715",
+      "minimumQuantity": 3,
+      "id": "e78fe99e-8579-4cd2-8aee-ceb8936f32cb",
+      "tierId": "47cce733-11a7-4657-8f98-33ae123af2d2"
+    },
+    "clientType": "QA Distribuidor 0726170715",
+    "client": {
+      "name": "QA Cliente 0726170715 S.R.L.",
+      "taxId": "QA0726170715",
+      "department": "Potosí",
+      "city": "Zona Central",
+      "whatsapp": "76170715",
+      "id": 16,
+      "typeId": 10
+    },
+    "warehouse": {
+      "name": "QA Almacén 0726170715",
+      "code": "QAALM0726170715",
+      "id": "29d9523b-4eeb-4ef1-9f66-e414caa6e49d"
+    },
+    "products": [
+      {
+        "name": "QA Taladro 0726170715",
+        "sku": "QATAL0726170715",
+        "normal": 20,
+        "special": 15,
+        "stock": 25,
+        "minimumStock": 1,
+        "id": "1e3c1d40-19c2-46e0-a79a-4a40ea34449e",
+        "priceId": "1bc5a35f-bba3-45e2-bfe3-4fb20dfe8fc3",
+        "stockId": "947a0ada-dae8-4de9-89b9-515c455bb604"
+      },
+      {
+        "name": "QA Sierra 0726170715",
+        "sku": "QASIE0726170715",
+        "normal": 35,
+        "special": 30,
+        "stock": 12,
+        "minimumStock": 1,
+        "id": "8b2da875-7871-4d5d-846f-d4633054c643",
+        "priceId": "6072a4a4-88e1-489e-bf1f-12065ed1a224",
+        "stockId": "0c26a972-403f-416d-882a-10a90af5e3db"
+      }
+    ]
+  },
+  "browserSignals": {
+    "pageErrors": [],
+    "consoleErrors": [],
+    "serverErrors": []
+  },
+  "results": [
+    {
+      "id": "QA-AUTH-001",
+      "title": "Inicio de sesión administrativo y carga del panel",
+      "status": "APROBADO",
+      "durationMs": 1107,
+      "startedAt": "2026-07-26T17:07:15.748Z",
+      "evidence": "Sesión iniciada como demo_admin; 68 permisos efectivos."
+    },
+    {
+      "id": "QA-CAT-001",
+      "title": "Crear una categoría de productos",
+      "status": "APROBADO",
+      "durationMs": 755,
+      "startedAt": "2026-07-26T17:07:16.858Z",
+      "evidence": "Categoría QA Herramientas 0726170715 creada con id e77cdf2a-bbad-401b-a11d-a8533260a331."
+    },
+    {
+      "id": "QA-PRICE-001",
+      "title": "Crear nivel de precio y regla automática desde tres unidades",
+      "status": "APROBADO",
+      "durationMs": 2023,
+      "startedAt": "2026-07-26T17:07:17.613Z",
+      "evidence": "Nivel QA Preferencial 0726170715 y regla x3 creados."
+    },
+    {
+      "id": "QA-INV-001",
+      "title": "Crear un almacén activo",
+      "status": "APROBADO",
+      "durationMs": 681,
+      "startedAt": "2026-07-26T17:07:19.636Z",
+      "evidence": "Almacén QA Almacén 0726170715 creado con id 29d9523b-4eeb-4ef1-9f66-e414caa6e49d."
+    },
+    {
+      "id": "QA-PROD-001",
+      "title": "Crear primer producto con precio normal",
+      "status": "APROBADO",
+      "durationMs": 2389,
+      "startedAt": "2026-07-26T17:07:20.317Z",
+      "evidence": "Producto QA Taladro 0726170715 creado a Bs 20.00."
+    },
+    {
+      "id": "QA-PROD-002",
+      "title": "Crear segundo producto con precio normal",
+      "status": "APROBADO",
+      "durationMs": 1509,
+      "startedAt": "2026-07-26T17:07:22.706Z",
+      "evidence": "Producto QA Sierra 0726170715 creado a Bs 35.00."
+    },
+    {
+      "id": "QA-PRICE-002",
+      "title": "Asignar precio especial por cantidad al primer producto",
+      "status": "APROBADO",
+      "durationMs": 4244,
+      "startedAt": "2026-07-26T17:07:24.215Z",
+      "evidence": "QA Taladro 0726170715: precio x3 = Bs 15.00."
+    },
+    {
+      "id": "QA-PRICE-003",
+      "title": "Asignar precio especial por cantidad al segundo producto",
+      "status": "APROBADO",
+      "durationMs": 4555,
+      "startedAt": "2026-07-26T17:07:28.460Z",
+      "evidence": "QA Sierra 0726170715: precio x3 = Bs 30.00."
+    },
+    {
+      "id": "QA-CLIENT-001",
+      "title": "Crear tipo y cliente asociado al nivel de precio",
+      "status": "APROBADO",
+      "durationMs": 961,
+      "startedAt": "2026-07-26T17:07:33.015Z",
+      "evidence": "Cliente QA Cliente 0726170715 S.R.L. asociado al nivel QA Preferencial 0726170715."
+    },
+    {
+      "id": "QA-INV-002",
+      "title": "Vincular QA Taladro 0726170715 con el almacén",
+      "status": "APROBADO",
+      "durationMs": 1226,
+      "startedAt": "2026-07-26T17:07:33.977Z",
+      "evidence": "Existencia vinculada para QA Taladro 0726170715 en QA Almacén 0726170715."
+    },
+    {
+      "id": "QA-INV-004",
+      "title": "Registrar entrada y validar saldo de QA Taladro 0726170715",
+      "status": "APROBADO",
+      "durationMs": 2144,
+      "startedAt": "2026-07-26T17:07:35.203Z",
+      "evidence": "Entrada de 25 unidades; saldo disponible verificado en 25."
+    },
+    {
+      "id": "QA-INV-003",
+      "title": "Vincular QA Sierra 0726170715 con el almacén",
+      "status": "APROBADO",
+      "durationMs": 1996,
+      "startedAt": "2026-07-26T17:07:37.347Z",
+      "evidence": "Existencia vinculada para QA Sierra 0726170715 en QA Almacén 0726170715."
+    },
+    {
+      "id": "QA-INV-005",
+      "title": "Registrar entrada y validar saldo de QA Sierra 0726170715",
+      "status": "APROBADO",
+      "durationMs": 1323,
+      "startedAt": "2026-07-26T17:07:39.343Z",
+      "evidence": "Entrada de 12 unidades; saldo disponible verificado en 12."
+    },
+    {
+      "id": "QA-QUOTE-001",
+      "title": "Generar cotización emitida de un producto a precio normal",
+      "status": "APROBADO",
+      "durationMs": 1738,
+      "startedAt": "2026-07-26T17:07:40.667Z",
+      "evidence": "COT-000020: 1 producto(s), total Bs 20.00, ahorro Bs 0.00."
+    },
+    {
+      "id": "QA-QUOTE-002",
+      "title": "Generar cotización emitida con varios productos y descuentos automáticos",
+      "status": "APROBADO",
+      "durationMs": 3884,
+      "startedAt": "2026-07-26T17:07:42.405Z",
+      "evidence": "COT-000021: 2 producto(s), total Bs 165.00, ahorro Bs 35.00."
+    },
+    {
+      "id": "QA-QUOTE-003",
+      "title": "Validar persistencia, total y estado emitido en el historial",
+      "status": "APROBADO",
+      "durationMs": 1475,
+      "startedAt": "2026-07-26T17:07:46.289Z",
+      "evidence": "Historial validado para COT-000020, COT-000021."
+    },
+    {
+      "id": "QA-QUOTE-004",
+      "title": "Generar PDF estándar y papel rollo de la cotización",
+      "status": "APROBADO",
+      "durationMs": 176,
+      "startedAt": "2026-07-26T17:07:47.764Z",
+      "evidence": "standard: 76.8 KiB; roll: 2.6 KiB."
+    },
+    {
+      "id": "QA-RBAC-001",
+      "title": "Validar navegación visible para el perfil Comercial",
+      "status": "APROBADO",
+      "durationMs": 1573,
+      "startedAt": "2026-07-26T17:07:47.940Z",
+      "evidence": "Comercial ve operación de ventas y no ve inventario ni administración."
+    },
+    {
+      "id": "QA-RBAC-002",
+      "title": "Validar navegación visible para el perfil Inventario",
+      "status": "APROBADO",
+      "durationMs": 1710,
+      "startedAt": "2026-07-26T17:07:49.513Z",
+      "evidence": "Inventario ve catálogo e inventario y no ve ventas ni administración."
+    },
+    {
+      "id": "QA-TECH-001",
+      "title": "Validar ausencia de errores JavaScript y respuestas HTTP 5xx",
+      "status": "APROBADO",
+      "durationMs": 73,
+      "startedAt": "2026-07-26T17:07:51.223Z",
+      "evidence": "Sin errores de página, consola relevantes ni respuestas HTTP 5xx."
+    }
+  ],
+  "fatalError": null
+}

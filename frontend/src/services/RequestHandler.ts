@@ -86,6 +86,26 @@ export class RequestHandler {
     return this.request<T>('DELETE', endpoint, undefined, options)
   }
 
+  public download(endpoint: string, options?: RequestOptions): Promise<Blob> {
+    return this.request<Blob>('GET', endpoint, undefined, {
+      ...options,
+      headers: { ...(options?.headers ?? {}), Accept: '*/*' },
+      responseType: 'blob',
+    } as RequestOptions & { responseType: 'blob' })
+  }
+
+  public postDownload<TBody = unknown>(
+    endpoint: string,
+    data?: TBody,
+    options?: RequestOptions,
+  ): Promise<Blob> {
+    return this.request<Blob>('POST', endpoint, data, {
+      ...options,
+      headers: { ...(options?.headers ?? {}), Accept: '*/*' },
+      responseType: 'blob',
+    } as RequestOptions & { responseType: 'blob' })
+  }
+
   public postMultipart<T>(
     endpoint: string,
     payload: MultipartPayload,
@@ -188,7 +208,7 @@ export class RequestHandler {
     method: Method,
     endpoint: string,
     data?: TBody,
-    options?: RequestOptions,
+    options?: RequestOptions & { responseType?: 'json' | 'blob' },
   ): Promise<TResponse> {
     const config: AxiosRequestConfig<TBody> & { skipAuthRefresh?: boolean } = {
       method,
@@ -197,6 +217,7 @@ export class RequestHandler {
       params: options?.params,
       headers: options?.headers,
       signal: options?.signal,
+      responseType: options?.responseType,
       skipAuthRefresh: options?.skipAuthRefresh,
     }
 

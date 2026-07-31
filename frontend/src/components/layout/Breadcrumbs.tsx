@@ -3,6 +3,9 @@ import { Link, useLocation } from 'react-router-dom'
 
 const segmentLabels: Record<string, string> = {
   dashboard: 'Panel principal',
+  clients: 'Clientes',
+  quotations: 'Cotizaciones',
+  history: 'Historial',
   products: 'Productos',
   categories: 'Categorías',
   'price-levels': 'Niveles de precio',

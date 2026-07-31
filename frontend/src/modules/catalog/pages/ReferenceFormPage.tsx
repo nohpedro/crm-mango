@@ -18,7 +18,12 @@ import {
 interface ReferenceFormPageProps {
   kind: 'category' | 'price-level'
 }
-const empty: CatalogWriteValues = { name: '', code: '', description: '', is_active: true }
+const empty: CatalogWriteValues = {
+  name: '',
+  code: '',
+  description: '',
+  is_active: true,
+}
 
 export function ReferenceFormPage({ kind }: ReferenceFormPageProps) {
   const { id } = useParams()

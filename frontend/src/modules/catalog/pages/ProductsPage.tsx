@@ -1,21 +1,20 @@
-import { Link } from 'react-router-dom'
 import { useState } from 'react'
-import { Eye, PackagePlus, Search } from 'lucide-react'
-import { toast } from 'sonner'
+import { Link, useLocation } from 'react-router-dom'
+import { ArrowDownToLine, DollarSign, Eye, PackagePlus, Search } from 'lucide-react'
 
-import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 import { PageHeading } from '../../../components/common/PageHeading'
 import { AdminTable, Pagination } from '../../admin/components/AdminTable'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
+import { ProductPricesModal } from '../components/ProductPricesModal'
 import { useCatalogFilters } from '../hooks/useCatalogFilters'
-import {
-  useCategories,
-  useProductMutations,
-  useProducts,
-} from '../hooks/useCatalogQueries'
+import { useCategories, useProduct, useProducts } from '../hooks/useCatalogQueries'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 
 export function ProductsPage() {
+  const location = useLocation()
   const { filters, update } = useCatalogFilters()
+  const user = useAuthStore((state) => state.user)
   const query = useProducts(filters)
   const categoryQuery = useCategories({
     ...filters,
@@ -23,59 +22,59 @@ export function ProductsPage() {
     page: 1,
     is_active: 'true',
   })
-  const mutations = useProductMutations()
-  const [pendingAction, setPendingAction] = useState<{
-    kind: 'activate' | 'deactivate' | 'delete' | 'restore'
-    id: string
-    label: string
-    title: string
-    description: string
-  } | null>(null)
+  const [pricingProductId, setPricingProductId] = useState<string | undefined>()
+  const pricingProductQuery = useProduct(pricingProductId)
   const products = query.data?.results ?? []
-  const action = (
-    kind: 'activate' | 'deactivate' | 'delete' | 'restore',
-    id: string,
-    label: string,
-  ) => {
-    const title =
-      label === 'Archivar' ? '¿Archivar este producto?' : `¿${label} este producto?`
-    const description =
-      label === 'Archivar'
-        ? 'El producto dejará de aparecer en el catálogo activo. Podrás recuperarlo después desde los productos archivados.'
-        : `Se va a ${label.toLowerCase()} el producto seleccionado.`
-    setPendingAction({ kind, id, label, title, description })
-  }
-  const confirmAction = () => {
-    if (!pendingAction) return
-    const { kind, id } = pendingAction
-    const successMessage = {
-      activate: 'Producto activado.',
-      deactivate: 'Producto desactivado.',
-      delete: 'Producto archivado.',
-      restore: 'Producto restaurado.',
-    }[kind]
-    void mutations[kind]
-      .mutateAsync(id)
-      .then(() => toast.success(successMessage))
-      .catch((error: unknown) =>
-        toast.error(getAdminErrorMessage(error, 'No se pudo completar la operación.')),
-      )
-      .finally(() => setPendingAction(null))
-  }
+
   return (
     <>
       <PageHeading
         title="Productos"
         description="Administra el catálogo, el estado y la disponibilidad comercial."
         action={
-          <Link
-            to="/products/new"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
-          >
-            <PackagePlus className="size-4" /> Nuevo producto
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {hasPermission(user, 'products.add_product') && (
+              <Link
+                to={{ pathname: '/products/import-export', search: location.search }}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-brand-200 px-4 py-3 text-sm font-bold text-brand-700 hover:bg-brand-50"
+              >
+                Importar / exportar
+              </Link>
+            )}
+            {hasPermission(user, 'products.add_product') && (
+              <Link
+                to="/products/new"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
+              >
+                <PackagePlus className="size-4" /> Nuevo producto
+              </Link>
+            )}
+            {hasPermission(user, 'products.view_category') && (
+              <Link
+                to="/products/categories"
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50"
+              >
+                Categorías
+              </Link>
+            )}
+            {hasPermission(user, 'products.view_pricelevel') && (
+              <Link
+                to="/products/price-levels"
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50"
+              >
+                Niveles de precio
+              </Link>
+            )}
+          </div>
         }
       />
+      <section className="mb-4 rounded-2xl border border-brand-100 bg-brand-50/60 p-5">
+        <h3 className="text-sm font-bold text-brand-900">¿Cómo funciona el catálogo?</h3>
+        <p className="mt-1 text-sm leading-6 text-brand-900/75">
+          Aquí creas productos y administras sus categorías y niveles de precio. Para sumar
+          unidades, usa “Agregar stock” en el producto correspondiente.
+        </p>
+      </section>
       <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px_180px]">
           <label className="relative lg:col-span-1">
@@ -123,11 +122,9 @@ export function ProductsPage() {
           <input
             type="checkbox"
             checked={filters.include_deleted}
-            onChange={(event) =>
-              update({ include_deleted: event.target.checked, page: 1 })
-            }
+            onChange={(event) => update({ include_deleted: event.target.checked, page: 1 })}
             className="size-4 rounded border-slate-300 text-brand-600"
-          />{' '}
+          />
           Incluir productos archivados
         </label>
       </section>
@@ -147,11 +144,7 @@ export function ProductsPage() {
             <td className="px-5 py-4">
               <div className="flex items-center gap-3">
                 {product.primary_image ? (
-                  <img
-                    src={product.primary_image}
-                    alt=""
-                    className="size-11 rounded-lg object-cover"
-                  />
+                  <img src={product.primary_image} alt="" className="size-11 rounded-lg object-cover" />
                 ) : (
                   <div className="grid size-11 place-items-center rounded-lg bg-slate-100 text-xs font-bold text-slate-400">
                     IMG
@@ -168,13 +161,9 @@ export function ProductsPage() {
                 </div>
               </div>
             </td>
-            <td className="whitespace-nowrap px-5 py-4 text-slate-600">
-              {product.category.name}
-            </td>
+            <td className="whitespace-nowrap px-5 py-4 text-slate-600">{product.category.name}</td>
             <td className="whitespace-nowrap px-5 py-4">
-              <p className="font-semibold text-slate-700">
-                {product.available_stock} disponibles
-              </p>
+              <p className="font-semibold text-slate-700">{product.available_stock} disponibles</p>
               <p className="text-xs text-slate-400">{product.total_stock} físicos</p>
             </td>
             <td className="whitespace-nowrap px-5 py-4">
@@ -187,11 +176,7 @@ export function ProductsPage() {
                       : 'rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700'
                 }
               >
-                {product.deleted_at
-                  ? 'Archivado'
-                  : product.is_active
-                    ? 'Activo'
-                    : 'Inactivo'}
+                {product.deleted_at ? 'Archivado' : product.is_active ? 'Activo' : 'Inactivo'}
               </span>
             </td>
             <td className="whitespace-nowrap px-5 py-4 text-slate-500">
@@ -199,54 +184,33 @@ export function ProductsPage() {
             </td>
             <td className="whitespace-nowrap px-5 py-4">
               <div className="flex flex-wrap items-center gap-3">
-                <Link
-                  to={`/products/${product.id}`}
-                  title="Ver detalle"
-                  className="text-brand-600 hover:text-brand-800"
-                >
+                <Link to={`/products/${product.id}`} title="Ver detalle" className="text-brand-600 hover:text-brand-800">
                   <Eye className="size-4" />
                 </Link>
-                <Link
-                  to={`/products/${product.id}/edit`}
-                  className="text-xs font-bold text-brand-600 hover:text-brand-800"
-                >
-                  Editar
-                </Link>
-                {product.deleted_at ? (
+                {hasPermission(user, 'products.change_product') && (
+                  <Link
+                    to={`/products/${product.id}/edit`}
+                    className="text-xs font-bold text-brand-600 hover:text-brand-800"
+                  >
+                    Editar
+                  </Link>
+                )}
+                {product.has_stock && hasPermission(user, 'inventory.add_stockmovement') && (
+                  <Link
+                    to={`/inventory/movements/new?product=${product.id}&type=ENTRY`}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900"
+                  >
+                    <ArrowDownToLine className="size-4" /> Agregar stock
+                  </Link>
+                )}
+                {!product.deleted_at && hasPermission(user, 'products.change_productprice') && (
                   <button
                     type="button"
-                    onClick={() => action('restore', product.id, 'Restaurar')}
-                    className="text-xs font-bold text-slate-500 hover:text-slate-800"
+                    onClick={() => setPricingProductId(product.id)}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-800"
                   >
-                    Restaurar
+                    <DollarSign className="size-4" /> Precios
                   </button>
-                ) : (
-                  <>
-                    {product.is_active ? (
-                      <button
-                        type="button"
-                        onClick={() => action('deactivate', product.id, 'Desactivar')}
-                        className="text-xs font-bold text-slate-500 hover:text-slate-800"
-                      >
-                        Desactivar
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => action('activate', product.id, 'Activar')}
-                        className="text-xs font-bold text-slate-500 hover:text-slate-800"
-                      >
-                        Activar
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => action('delete', product.id, 'Archivar')}
-                      className="text-xs font-bold text-red-600 hover:text-red-800"
-                    >
-                      Archivar
-                    </button>
-                  </>
                 )}
               </div>
             </td>
@@ -254,22 +218,14 @@ export function ProductsPage() {
         ))}
       </AdminTable>
       {query.data && (
-        <Pagination
-          page={filters.page}
-          count={query.data.count}
-          onPageChange={(page) => update({ page })}
+        <Pagination page={filters.page} count={query.data.count} onPageChange={(page) => update({ page })} />
+      )}
+      {pricingProductQuery.data && (
+        <ProductPricesModal
+          product={pricingProductQuery.data}
+          onClose={() => setPricingProductId(undefined)}
         />
       )}
-      <ConfirmDialog
-        open={Boolean(pendingAction)}
-        title={pendingAction?.title ?? ''}
-        description={pendingAction?.description ?? ''}
-        confirmLabel={pendingAction?.label ?? 'Confirmar'}
-        danger={pendingAction?.kind === 'delete'}
-        pending={Object.values(mutations).some((mutation) => mutation.isPending)}
-        onClose={() => setPendingAction(null)}
-        onConfirm={confirmAction}
-      />
     </>
   )
 }

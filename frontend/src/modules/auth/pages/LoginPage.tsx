@@ -18,8 +18,7 @@ export function LoginPage() {
   const location = useLocation()
   const setAuthenticated = useAuthStore((state) => state.setAuthenticated)
 
-  const from =
-    (location.state as { from?: string } | null)?.from ?? '/dashboard'
+  const from = (location.state as { from?: string } | null)?.from ?? '/dashboard'
 
   const {
     register,
@@ -130,7 +129,6 @@ export function LoginPage() {
 
             <label className="block text-sm font-semibold text-slate-700">
               Nombre de usuario <span className="text-red-500">*</span>
-
               <input
                 {...register('username')}
                 autoComplete="username"
@@ -138,12 +136,8 @@ export function LoginPage() {
                 aria-invalid={Boolean(errors.username)}
                 className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
               />
-
               {errors.username && (
-                <span
-                  role="alert"
-                  className="mt-1.5 block text-xs text-red-600"
-                >
+                <span role="alert" className="mt-1.5 block text-xs text-red-600">
                   {errors.username.message}
                 </span>
               )}
@@ -151,7 +145,6 @@ export function LoginPage() {
 
             <label className="block text-sm font-semibold text-slate-700">
               Contraseña <span className="text-red-500">*</span>
-
               <span className="relative mt-2 block">
                 <input
                   {...register('password')}
@@ -163,11 +156,7 @@ export function LoginPage() {
 
                 <button
                   type="button"
-                  aria-label={
-                    showPassword
-                      ? 'Ocultar contraseña'
-                      : 'Mostrar contraseña'
-                  }
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   className="absolute inset-y-0 right-0 grid w-12 place-items-center text-slate-400 transition hover:text-slate-700"
                   onClick={() => setShowPassword((value) => !value)}
                 >
@@ -178,12 +167,8 @@ export function LoginPage() {
                   )}
                 </button>
               </span>
-
               {errors.password && (
-                <span
-                  role="alert"
-                  className="mt-1.5 block text-xs text-red-600"
-                >
+                <span role="alert" className="mt-1.5 block text-xs text-red-600">
                   {errors.password.message}
                 </span>
               )}
