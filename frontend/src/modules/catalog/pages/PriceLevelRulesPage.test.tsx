@@ -3,9 +3,11 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { server } from '../../../test/server'
+import { useAuthStore } from '../../../store/authStore'
+import { adminUser } from '../../../test/factories'
 import { PriceLevelRulesPage } from './PriceLevelRulesPage'
 
 const level = {
@@ -52,6 +54,7 @@ const tiers = [
 
 describe('PriceLevelRulesPage', () => {
   afterEach(cleanup)
+  beforeEach(() => useAuthStore.setState({ status: 'authenticated', user: adminUser }))
 
   it('valida en español y permite editar una cantidad mínima', async () => {
     let patchBody: Record<string, unknown> | null = null

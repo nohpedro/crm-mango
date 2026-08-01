@@ -1,33 +1,58 @@
 import { FilePlus2, FileText, Search } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
+import { toast } from 'sonner'
 
 import { PageHeading } from '../../../components/common/PageHeading'
 import { AdminTable, Pagination } from '../../admin/components/AdminTable'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
-import { useQuotations } from '../hooks/useQuotations'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
+import { useQuotationMutations, useQuotations } from '../hooks/useQuotations'
+import type { QuotationStatus } from '../types/quotation.types'
 
-const statusLabel = { draft: 'Borrador', issued: 'Emitida', cancelled: 'Anulada' }
+const statusLabel: Record<QuotationStatus, string> = {
+  pending: 'Pendiente',
+  paid: 'Pagada',
+}
 
 export function QuotationsPage() {
+  const user = useAuthStore((state) => state.user)
+  const canChangeStatus = hasPermission(user, 'quotations.change_quotation')
+  const canCreate = hasPermission(user, 'quotations.add_quotation')
+  const mutations = useQuotationMutations()
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const status = searchParams.get('status') ?? ''
   const [page, setPage] = useState(1)
   const query = useQuotations({ search, status, page, ordering: '-created_at' })
   const quotations = query.data?.results ?? []
+  const changeStatus = (id: string, nextStatus: QuotationStatus) => {
+    void mutations.updateStatus
+      .mutateAsync({ id, status: nextStatus })
+      .then((updatedQuotation) =>
+        toast.success(
+          `Cotización marcada como ${statusLabel[updatedQuotation.status].toLowerCase()}.`,
+        ),
+      )
+      .catch((error: unknown) =>
+        toast.error(getAdminErrorMessage(error, 'No se pudo cambiar el estado.')),
+      )
+  }
   return (
     <>
       <PageHeading
         title="Historial de cotizaciones"
         description="Consulta las cotizaciones generadas, sus productos, importes, estado y documentos emitidos."
         action={
-          <Link
-            to="/quotations"
-            className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
-          >
-            <FilePlus2 className="size-4" /> Nueva cotización
-          </Link>
+          canCreate ? (
+            <Link
+              to="/quotations"
+              className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
+            >
+              <FilePlus2 className="size-4" /> Nueva cotización
+            </Link>
+          ) : null
         }
       />
       <section className="mb-4 rounded-2xl border border-brand-100 bg-brand-50/60 p-5">
@@ -63,9 +88,8 @@ export function QuotationsPage() {
           className="rounded-xl border border-slate-200 px-3 text-sm"
         >
           <option value="">Todos los estados</option>
-          <option value="draft">Borrador</option>
-          <option value="issued">Emitida</option>
-          <option value="cancelled">Anulada</option>
+          <option value="pending">Pendientes</option>
+          <option value="paid">Pagadas</option>
         </select>
       </section>
       <AdminTable
@@ -94,9 +118,40 @@ export function QuotationsPage() {
               Bs {Number(quotation.total).toFixed(2)}
             </td>
             <td className="px-5 py-4">
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                {statusLabel[quotation.status]}
-              </span>
+              {canChangeStatus ? (
+                <select
+                  aria-label={`Cambiar estado de ${quotation.number}`}
+                  value={quotation.status}
+                  disabled={
+                    mutations.updateStatus.isPending &&
+                    mutations.updateStatus.variables?.id === String(quotation.id)
+                  }
+                  onChange={(event) =>
+                    changeStatus(
+                      String(quotation.id),
+                      event.target.value as QuotationStatus,
+                    )
+                  }
+                  className={`rounded-full border-0 px-3 py-1.5 text-xs font-bold outline-none ring-1 disabled:opacity-60 ${
+                    quotation.status === 'paid'
+                      ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                      : 'bg-amber-50 text-amber-800 ring-amber-200'
+                  }`}
+                >
+                  <option value="pending">Pendiente</option>
+                  <option value="paid">Pagada</option>
+                </select>
+              ) : (
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    quotation.status === 'paid'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-amber-50 text-amber-800'
+                  }`}
+                >
+                  {statusLabel[quotation.status]}
+                </span>
+              )}
             </td>
             <td className="px-5 py-4 text-sm text-slate-600">
               {new Date(quotation.created_at).toLocaleDateString('es-BO')}

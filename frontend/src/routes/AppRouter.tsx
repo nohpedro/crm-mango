@@ -27,62 +27,61 @@ import { RolesPage } from '../modules/admin/pages/RolesPage'
 import { RoleFormPage } from '../modules/admin/pages/RoleFormPage'
 import { UsersPage } from '../modules/admin/pages/UsersPage'
 import { UserFormPage } from '../modules/admin/pages/UserFormPage'
-import { AdminRoute } from './AdminRoute'
 import { ProtectedRoute } from './ProtectedRoute'
 import { PublicOnlyRoute } from './PublicOnlyRoute'
 import { PermissionGate } from './PermissionGate'
 import { StatusPage } from '../modules/shared/pages/StatusPage'
 const adminChildren = [
-  { path: 'users', element: <UsersPage /> },
-  { path: 'users/new', element: <UserFormPage /> },
-  { path: 'users/:id/edit', element: <UserFormPage /> },
-  { path: 'roles', element: <RolesPage /> },
-  { path: 'roles/new', element: <RoleFormPage /> },
-  { path: 'roles/:id/edit', element: <RoleFormPage /> },
-  { path: 'clients/import-export', element: <DataTransferPage resource="clients" /> },
-  { path: 'products/new', element: <ProductFormPage /> },
-  { path: 'products/:id/edit', element: <ProductFormPage /> },
-  { path: 'products/:id/images', element: <ProductImagesPage /> },
-  { path: 'products/:id/prices', element: <ProductPricesPage /> },
-  { path: 'price-levels/:id/rules', element: <PriceLevelRulesPage /> },
-  { path: 'products/import-export', element: <DataTransferPage resource="products" /> },
+  { path: 'users', element: <PermissionGate anyOf={['users.view_user']}><UsersPage /></PermissionGate> },
+  { path: 'users/new', element: <PermissionGate anyOf={['users.add_user']}><UserFormPage /></PermissionGate> },
+  { path: 'users/:id/edit', element: <PermissionGate anyOf={['users.change_user']}><UserFormPage /></PermissionGate> },
+  { path: 'roles', element: <PermissionGate anyOf={['users.view_role']}><RolesPage /></PermissionGate> },
+  { path: 'roles/new', element: <PermissionGate anyOf={['users.add_role']}><RoleFormPage /></PermissionGate> },
+  { path: 'roles/:id/edit', element: <PermissionGate anyOf={['users.change_role']}><RoleFormPage /></PermissionGate> },
+  { path: 'clients/import-export', element: <PermissionGate anyOf={['clients.view_client', 'clients.add_client']}><DataTransferPage resource="clients" /></PermissionGate> },
+  { path: 'products/new', element: <PermissionGate anyOf={['products.add_product']}><ProductFormPage /></PermissionGate> },
+  { path: 'products/:id/edit', element: <PermissionGate anyOf={['products.change_product']}><ProductFormPage /></PermissionGate> },
+  { path: 'products/:id/images', element: <PermissionGate allOf={['products.view_product']} anyOf={['products.view_productimage', 'products.add_productimage', 'products.change_productimage', 'products.delete_productimage']}><ProductImagesPage /></PermissionGate> },
+  { path: 'products/:id/prices', element: <PermissionGate allOf={['products.view_product']} anyOf={['products.view_productprice', 'products.add_productprice', 'products.change_productprice']}><ProductPricesPage /></PermissionGate> },
+  { path: 'price-levels/:id/rules', element: <PermissionGate allOf={['products.view_pricelevel', 'products.view_pricetier']}><PriceLevelRulesPage /></PermissionGate> },
+  { path: 'products/import-export', element: <PermissionGate anyOf={['products.view_product', 'products.add_product']}><DataTransferPage resource="products" /></PermissionGate> },
   {
     path: 'inventory/warehouses/import-export',
-    element: <DataTransferPage resource="warehouses" />,
+    element: <PermissionGate anyOf={['inventory.view_warehouse', 'inventory.add_warehouse']}><DataTransferPage resource="warehouses" /></PermissionGate>,
   },
   {
     path: 'inventory/stocks/import-export',
-    element: <DataTransferPage resource="stocks" />,
+    element: <PermissionGate anyOf={['inventory.view_stock', 'inventory.add_stock']}><DataTransferPage resource="stocks" /></PermissionGate>,
   },
-  { path: 'categories/new', element: <ReferenceFormPage kind="category" /> },
-  { path: 'categories/:id/edit', element: <ReferenceFormPage kind="category" /> },
-  { path: 'products/categories/new', element: <ReferenceFormPage kind="category" /> },
+  { path: 'categories/new', element: <PermissionGate anyOf={['products.add_category']}><ReferenceFormPage kind="category" /></PermissionGate> },
+  { path: 'categories/:id/edit', element: <PermissionGate anyOf={['products.change_category']}><ReferenceFormPage kind="category" /></PermissionGate> },
+  { path: 'products/categories/new', element: <PermissionGate anyOf={['products.add_category']}><ReferenceFormPage kind="category" /></PermissionGate> },
   {
     path: 'products/categories/:id/edit',
-    element: <ReferenceFormPage kind="category" />,
+    element: <PermissionGate anyOf={['products.change_category']}><ReferenceFormPage kind="category" /></PermissionGate>,
   },
-  { path: 'price-levels/new', element: <ReferenceFormPage kind="price-level" /> },
-  { path: 'price-levels/:id/edit', element: <ReferenceFormPage kind="price-level" /> },
+  { path: 'price-levels/new', element: <PermissionGate anyOf={['products.add_pricelevel']}><ReferenceFormPage kind="price-level" /></PermissionGate> },
+  { path: 'price-levels/:id/edit', element: <PermissionGate anyOf={['products.change_pricelevel']}><ReferenceFormPage kind="price-level" /></PermissionGate> },
   {
     path: 'products/price-levels/new',
-    element: <ReferenceFormPage kind="price-level" />,
+    element: <PermissionGate anyOf={['products.add_pricelevel']}><ReferenceFormPage kind="price-level" /></PermissionGate>,
   },
   {
     path: 'products/price-levels/:id/edit',
-    element: <ReferenceFormPage kind="price-level" />,
+    element: <PermissionGate anyOf={['products.change_pricelevel']}><ReferenceFormPage kind="price-level" /></PermissionGate>,
   },
-  { path: 'inventory/warehouses/new', element: <WarehouseFormPage /> },
-  { path: 'inventory/warehouses/:id/edit', element: <WarehouseFormPage /> },
-  { path: 'inventory/stocks/new', element: <StockFormPage /> },
-  { path: 'inventory/stocks/:id/edit', element: <StockFormPage /> },
-  { path: 'inventory/movements/new', element: <MovementFormPage /> },
+  { path: 'inventory/warehouses/new', element: <PermissionGate anyOf={['inventory.add_warehouse']}><WarehouseFormPage /></PermissionGate> },
+  { path: 'inventory/warehouses/:id/edit', element: <PermissionGate anyOf={['inventory.change_warehouse']}><WarehouseFormPage /></PermissionGate> },
+  { path: 'inventory/stocks/new', element: <PermissionGate anyOf={['inventory.add_stock']}><StockFormPage /></PermissionGate> },
+  { path: 'inventory/stocks/:id/edit', element: <PermissionGate anyOf={['inventory.change_stock']}><StockFormPage /></PermissionGate> },
+  { path: 'inventory/movements/new', element: <PermissionGate anyOf={['inventory.add_stockmovement']}><MovementFormPage /></PermissionGate> },
 ]
 const appChildren = [
   { index: true, element: <Navigate to="/dashboard" replace /> },
   { path: 'dashboard', element: <DashboardPage /> },
   {
     path: 'clients',
-    element: <PermissionGate anyOf={['clients.view_client', 'clients.add_client']}><ClientsPage /></PermissionGate>,
+    element: <PermissionGate anyOf={['clients.view_client']}><ClientsPage /></PermissionGate>,
   },
   {
     path: 'clients/new',
@@ -111,20 +110,20 @@ const appChildren = [
   },
   {
     path: 'quotations/templates',
-    element: <PermissionGate anyOf={['quotations.change_quotation']}><QuotationTemplatesPage /></PermissionGate>,
+    element: <PermissionGate anyOf={['quotations.manage_quotation_templates']}><QuotationTemplatesPage /></PermissionGate>,
   },
   {
     path: 'products',
-    element: <PermissionGate anyOf={['products.view_product', 'products.add_product']}><ProductsPage /></PermissionGate>,
+    element: <PermissionGate anyOf={['products.view_product']}><ProductsPage /></PermissionGate>,
   },
   {
     path: 'products/:id',
     element: <PermissionGate anyOf={['products.view_product']}><ProductDetailPage /></PermissionGate>,
   },
-  { path: 'categories', element: <ReferenceListPage kind="category" /> },
-  { path: 'price-levels', element: <ReferenceListPage kind="price-level" /> },
-  { path: 'products/categories', element: <ReferenceListPage kind="category" /> },
-  { path: 'products/price-levels', element: <ReferenceListPage kind="price-level" /> },
+  { path: 'categories', element: <PermissionGate anyOf={['products.view_category']}><ReferenceListPage kind="category" /></PermissionGate> },
+  { path: 'price-levels', element: <PermissionGate anyOf={['products.view_pricelevel']}><ReferenceListPage kind="price-level" /></PermissionGate> },
+  { path: 'products/categories', element: <PermissionGate anyOf={['products.view_category']}><ReferenceListPage kind="category" /></PermissionGate> },
+  { path: 'products/price-levels', element: <PermissionGate anyOf={['products.view_pricelevel']}><ReferenceListPage kind="price-level" /></PermissionGate> },
   {
     path: 'inventory',
     element: <PermissionGate anyOf={['inventory.view_stock']}><StocksPage /></PermissionGate>,
@@ -141,7 +140,7 @@ const appChildren = [
     path: 'inventory/movements',
     element: <PermissionGate anyOf={['inventory.view_stockmovement']}><MovementsPage /></PermissionGate>,
   },
-  { element: <AdminRoute />, children: adminChildren },
+  ...adminChildren,
 ]
 const router = createBrowserRouter([
   {

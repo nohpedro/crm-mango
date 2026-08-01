@@ -1,6 +1,6 @@
 import type { PaginatedResponse } from '../../../types/api'
 
-export type QuotationStatus = 'draft' | 'issued' | 'cancelled'
+export type QuotationStatus = 'pending' | 'paid'
 export type PaperFormat = 'standard' | 'roll'
 
 export type QuotationSectionKey = string
@@ -124,8 +124,8 @@ export interface QuotationWriteRequest {
   client_tax_id: string
   client_phone: string
   client_address: string
-  template: number | null
-  valid_days: number
+  template?: number | null
+  valid_days?: number
   notes: string
   status: QuotationStatus
   items: Array<{ product: string; quantity: number }>

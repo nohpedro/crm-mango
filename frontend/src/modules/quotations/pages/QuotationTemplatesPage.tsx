@@ -436,7 +436,7 @@ export function QuotationTemplatesPage() {
       <ConfirmDialog
         open={deleteTemplateOpen}
         title="¿Eliminar esta plantilla?"
-        description="Las cotizaciones ya emitidas conservarán su diseño."
+        description="Las cotizaciones ya generadas conservarán su diseño."
         confirmLabel="Eliminar plantilla"
         danger
         pending={mutations.remove.isPending}

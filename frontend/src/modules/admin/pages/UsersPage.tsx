@@ -10,10 +10,14 @@ import { AdminTable, Pagination } from '../components/AdminTable'
 import { useListFilters } from '../hooks/useListFilters'
 import { useUserMutations, useUsers } from '../hooks/useAdminQueries'
 import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 
 export function UsersPage() {
   const { filters, update } = useListFilters()
-  const currentUserId = useAuthStore((state) => state.user?.id)
+  const currentUser = useAuthStore((state) => state.user)
+  const currentUserId = currentUser?.id
+  const canAdd = hasPermission(currentUser, 'users.add_user')
+  const canChange = hasPermission(currentUser, 'users.change_user')
   const query = useUsers(filters)
   const { update: updateUser } = useUserMutations()
   const [pendingUser, setPendingUser] = useState<{
@@ -43,12 +47,12 @@ export function UsersPage() {
         title="Usuarios"
         description="Administra cuentas, estados y roles de acceso del CRM."
         action={
-          <Link
+          canAdd ? <Link
             to="/users/new"
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
           >
             <UserPlus className="size-4" /> Nuevo usuario
-          </Link>
+          </Link> : null
         }
       />
       <section className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
@@ -128,13 +132,13 @@ export function UsersPage() {
             </td>
             <td className="whitespace-nowrap px-5 py-4">
               <div className="flex items-center gap-3">
-                <Link
+                {canChange && <Link
                   to={`/users/${user.id}/edit`}
                   className="text-xs font-bold text-brand-600 hover:text-brand-800"
                 >
                   Editar
-                </Link>
-                {user.id === currentUserId && user.is_active ? (
+                </Link>}
+                {canChange && (user.id === currentUserId && user.is_active ? (
                   <span
                     title="No puedes desactivar tu propio usuario."
                     className="text-xs font-semibold text-slate-400"
@@ -156,7 +160,7 @@ export function UsersPage() {
                   >
                     {user.is_active ? 'Desactivar' : 'Activar'}
                   </button>
-                )}
+                ))}
               </div>
             </td>
           </tr>

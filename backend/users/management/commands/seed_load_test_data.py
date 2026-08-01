@@ -388,7 +388,7 @@ class Command(BaseCommand):
                             f"{marker} | Cotización generada para pruebas "
                             "manuales de volumen y reportes."
                         ),
-                        "status": Quotation.Status.ISSUED,
+                        "status": Quotation.Status.PENDING,
                         "items": items,
                     }
                 )

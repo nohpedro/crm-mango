@@ -60,6 +60,13 @@ class HasRoleModelPermission(BasePermission):
         if required_permission:
             return self._has_permission(user, required_permission)
 
+        required_any_permissions = getattr(view, "required_any_permissions", None)
+        if required_any_permissions:
+            return any(
+                self._has_permission(user, permission)
+                for permission in required_any_permissions
+            )
+
         queryset = getattr(view, "queryset", None)
         model = getattr(queryset, "model", None)
         if not model:

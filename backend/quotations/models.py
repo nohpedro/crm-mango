@@ -46,9 +46,8 @@ class QuotationTemplateImage(models.Model):
 
 class Quotation(models.Model):
     class Status(models.TextChoices):
-        DRAFT = "draft", "Borrador"
-        ISSUED = "issued", "Emitida"
-        CANCELLED = "cancelled", "Anulada"
+        PENDING = "pending", "Pendiente"
+        PAID = "paid", "Pagada"
 
     number = models.CharField(max_length=24, unique=True, editable=False)
     client = models.ForeignKey(
@@ -68,7 +67,7 @@ class Quotation(models.Model):
     template_snapshot = models.JSONField(default=dict, blank=True)
     valid_days = models.PositiveSmallIntegerField(default=7, validators=[MinValueValidator(1)])
     notes = models.TextField(blank=True)
-    status = models.CharField(max_length=12, choices=Status.choices, default=Status.ISSUED)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="quotations_created"
     )
@@ -78,6 +77,16 @@ class Quotation(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["number"]), models.Index(fields=["status", "created_at"])]
+        permissions = [
+            (
+                "configure_quotation_document",
+                "Puede acceder a la configuración del documento de cotización",
+            ),
+            (
+                "manage_quotation_templates",
+                "Puede administrar las plantillas de cotización",
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         for field in ("client_name", "client_tax_id", "client_phone", "client_address", "notes"):

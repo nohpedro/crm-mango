@@ -1,9 +1,11 @@
-import { History, Plus, Search, Trash2 } from 'lucide-react'
+import { CheckCircle2, Clock3, History, Plus, Search, Settings2, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { PageHeading } from '../../../components/common/PageHeading'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { catalogService } from '../../catalog/services/catalog.service'
 import { useProducts } from '../../catalog/hooks/useCatalogQueries'
@@ -46,9 +48,19 @@ export function QuotationFormPage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const editing = Boolean(id)
+  const user = useAuthStore((state) => state.user)
+  const canConfigureDocument = hasPermission(
+    user,
+    'quotations.configure_quotation_document',
+  )
+  const canManageTemplates = hasPermission(
+    user,
+    'quotations.manage_quotation_templates',
+  )
+  const canViewHistory = hasPermission(user, 'quotations.view_quotation')
   const quotation = useQuotation(id)
   const mutations = useQuotationMutations()
-  const templates = useQuotationTemplates()
+  const templates = useQuotationTemplates(canConfigureDocument || canManageTemplates)
   const [clientSearch, setClientSearch] = useState('')
   const [productSearch, setProductSearch] = useState('')
   const clients = useClients({
@@ -73,7 +85,7 @@ export function QuotationFormPage() {
   const [address, setAddress] = useState('')
   const [validDays, setValidDays] = useState(7)
   const [notes, setNotes] = useState('')
-  const [status, setStatus] = useState<QuotationStatus>('issued')
+  const [status, setStatus] = useState<QuotationStatus>('pending')
   const [template, setTemplate] = useState<number | null>(null)
   const [lines, setLines] = useState<Line[]>([])
   const pricingRequest = useRef(0)
@@ -208,8 +220,9 @@ export function QuotationFormPage() {
       client_tax_id: taxId,
       client_phone: phone,
       client_address: address,
-      template: selectedTemplate,
-      valid_days: validDays,
+      ...(canConfigureDocument
+        ? { template: selectedTemplate, valid_days: validDays }
+        : {}),
       notes,
       status,
       items: lines.map((line) => ({
@@ -237,18 +250,20 @@ export function QuotationFormPage() {
         description="Busca al cliente y los productos; los precios, niveles y totales se calculan solos."
         action={
           <div className="flex flex-wrap gap-2">
-            <Link
-              to="/quotations/templates"
-              className="inline-flex items-center gap-2 rounded-xl border border-brand-200 px-4 py-3 text-sm font-bold text-brand-700"
-            >
-              Plantillas
-            </Link>
-            <Link
+            {canManageTemplates && (
+              <Link
+                to="/quotations/templates"
+                className="inline-flex items-center gap-2 rounded-xl border border-brand-200 px-4 py-3 text-sm font-bold text-brand-700"
+              >
+                Plantillas
+              </Link>
+            )}
+            {canViewHistory && <Link
               to="/quotations/history"
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700"
             >
               <History className="size-4" /> Ver historial
-            </Link>
+            </Link>}
           </div>
         }
       />
@@ -426,25 +441,33 @@ export function QuotationFormPage() {
           </main>
           <aside className="h-fit rounded-2xl border border-brand-100 bg-brand-50 p-5">
             <h3 className="font-bold text-brand-900">Resumen</h3>
-            <label className="mt-4 block text-sm font-semibold text-brand-900">
-              Plantilla del documento
-              <select
-                value={selectedTemplate ?? ''}
-                onChange={(event) => setTemplate(event.target.value ? Number(event.target.value) : null)}
-                className={inputClass}
-              >
-                <option value="">Selecciona una plantilla guardada</option>
-                {activeTemplates.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                    {item.is_default ? ' · Predeterminada' : ''}
-                  </option>
-                ))}
-              </select>
-              <span className="mt-1 block text-xs font-normal text-brand-900/70">
-                Define las secciones que se mostrarán en el PDF.
-              </span>
-            </label>
+            <fieldset className="mt-4">
+              <legend className="text-sm font-semibold text-brand-900">Estado</legend>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStatus('pending')}
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
+                    status === 'pending'
+                      ? 'border-amber-300 bg-amber-100 text-amber-900 ring-2 ring-amber-100'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Clock3 className="size-4" /> Pendiente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatus('paid')}
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
+                    status === 'paid'
+                      ? 'border-emerald-300 bg-emerald-100 text-emerald-900 ring-2 ring-emerald-100'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <CheckCircle2 className="size-4" /> Pagada
+                </button>
+              </div>
+            </fieldset>
             <dl className="mt-4 space-y-3 text-sm">
               <div className="flex justify-between">
                 <dt>Subtotal normal</dt>
@@ -459,30 +482,52 @@ export function QuotationFormPage() {
                 <dd>{money(totals.final)}</dd>
               </div>
             </dl>
-            <label className="mt-5 block text-sm font-semibold text-brand-900">
-              Vigencia (días)
-              <input
-                type="number"
-                min="1"
-                value={validDays}
-                onChange={(event) =>
-                  setValidDays(Math.max(1, Number(event.target.value)))
-                }
-                className={inputClass}
-              />
-            </label>
-            <label className="mt-4 block text-sm font-semibold text-brand-900">
-              Estado
-              <select
-                value={status}
-                onChange={(event) => setStatus(event.target.value as QuotationStatus)}
-                className={inputClass}
-              >
-                <option value="draft">Borrador</option>
-                <option value="issued">Emitida</option>
-                <option value="cancelled">Anulada</option>
-              </select>
-            </label>
+            {canConfigureDocument ? (
+            <details className="mt-5 rounded-xl border border-brand-200 bg-white/80 p-3">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-bold text-brand-900">
+                <Settings2 className="size-4" /> Configuración del documento
+              </summary>
+              <div className="mt-3 border-t border-brand-100 pt-3">
+                <label className="block text-sm font-semibold text-brand-900">
+                  Plantilla
+                  <select
+                    value={selectedTemplate ?? ''}
+                    onChange={(event) =>
+                      setTemplate(event.target.value ? Number(event.target.value) : null)
+                    }
+                    className={inputClass}
+                  >
+                    <option value="">Selecciona una plantilla guardada</option>
+                    {activeTemplates.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                        {item.is_default ? ' · Predeterminada' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="mt-3 block text-sm font-semibold text-brand-900">
+                  Vigencia (días)
+                  <input
+                    type="number"
+                    min="1"
+                    value={validDays}
+                    onChange={(event) =>
+                      setValidDays(Math.max(1, Number(event.target.value)))
+                    }
+                    className={inputClass}
+                  />
+                </label>
+                <p className="mt-2 text-xs leading-5 text-brand-900/65">
+                  Estas opciones solo afectan la presentación y vigencia del documento.
+                </p>
+              </div>
+            </details>
+            ) : (
+              <p className="mt-5 rounded-xl border border-brand-100 bg-white/70 p-3 text-xs leading-5 text-brand-900/70">
+                Se usará automáticamente la plantilla y vigencia predeterminadas.
+              </p>
+            )}
             <label className="mt-4 block text-sm font-semibold text-brand-900">
               Notas
               <textarea

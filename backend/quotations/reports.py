@@ -37,6 +37,11 @@ PERIOD_LABELS = {
     "month": "Este mes",
     "custom": "Rango personalizado",
 }
+STATUS_LABELS = {
+    "all": "Todos los estados",
+    Quotation.Status.PENDING: "Pendientes",
+    Quotation.Status.PAID: "Pagadas",
+}
 
 
 def _period_bounds(period, now=None, start_date=None, end_date=None):
@@ -71,12 +76,16 @@ def _period_bounds(period, now=None, start_date=None, end_date=None):
     return start, end
 
 
-def _issued_between(start, end):
-    return Quotation.objects.filter(
-        status=Quotation.Status.ISSUED,
+def _quotations_between(start, end, quotation_status="all"):
+    if quotation_status not in STATUS_LABELS:
+        raise ValueError("El estado debe ser all, pending o paid.")
+    queryset = Quotation.objects.filter(
         created_at__gte=start,
         created_at__lt=end,
     )
+    if quotation_status != "all":
+        queryset = queryset.filter(status=quotation_status)
+    return queryset
 
 
 def _money_expression():
@@ -104,9 +113,9 @@ def _queryset_summary(queryset):
     }
 
 
-def _summary(period, now=None):
+def _summary(period, now=None, quotation_status="all"):
     start, end = _period_bounds(period, now)
-    queryset = _issued_between(start, end)
+    queryset = _quotations_between(start, end, quotation_status)
     return _queryset_summary(queryset)
 
 
@@ -115,11 +124,12 @@ def dashboard_data(
     now=None,
     start_date=None,
     end_date=None,
+    quotation_status="all",
 ):
     start, end = _period_bounds(period, now, start_date, end_date)
-    quotations = _issued_between(start, end)
+    quotations = _quotations_between(start, end, quotation_status)
     summaries = {
-        key: _summary(key, now)
+        key: _summary(key, now, quotation_status)
         for key in ("day", "week", "month")
     }
 
@@ -189,22 +199,35 @@ def dashboard_data(
             "start": start.date().isoformat(),
             "end": (end - timedelta(microseconds=1)).date().isoformat(),
         },
+        "status": {
+            "key": quotation_status,
+            "label": STATUS_LABELS[quotation_status],
+        },
         "sales": summaries,
         "selected": selected,
         "series": series,
         "top_products": top_products,
         "top_clients": top_clients,
-        "definition": "Se consideran ventas las cotizaciones emitidas.",
+        "definition": (
+            "Se muestran cotizaciones pendientes y pagadas."
+            if quotation_status == "all"
+            else f"Se muestran únicamente las cotizaciones {STATUS_LABELS[quotation_status].lower()}."
+        ),
     }
 
 
-def report_csv(period="month", now=None, start_date=None, end_date=None):
+def report_csv(
+    period="month",
+    now=None,
+    start_date=None,
+    end_date=None,
+    quotation_status="all",
+):
     start, end = _period_bounds(period, now, start_date, end_date)
+    quotations = _quotations_between(start, end, quotation_status)
     rows = (
         QuotationItem.objects.filter(
-            quotation__status=Quotation.Status.ISSUED,
-            quotation__created_at__gte=start,
-            quotation__created_at__lt=end,
+            quotation__in=quotations,
         )
         .select_related("quotation", "product")
         .order_by("quotation__created_at", "quotation__number", "id")
@@ -355,8 +378,20 @@ def _table(data, widths, header=True):
     return table
 
 
-def report_pdf(period="month", now=None, start_date=None, end_date=None):
-    data = dashboard_data(period, now, start_date, end_date)
+def report_pdf(
+    period="month",
+    now=None,
+    start_date=None,
+    end_date=None,
+    quotation_status="all",
+):
+    data = dashboard_data(
+        period,
+        now,
+        start_date,
+        end_date,
+        quotation_status,
+    )
     styles = _pdf_styles()
     buffer = BytesIO()
     document = SimpleDocTemplate(
@@ -412,7 +447,7 @@ def report_pdf(period="month", now=None, start_date=None, end_date=None):
             Paragraph(data["period"]["label"], styles["metric_detail"]),
         ],
         [
-            Paragraph("Cotizaciones emitidas", styles["metric_label"]),
+            Paragraph("Cotizaciones incluidas", styles["metric_label"]),
             Paragraph(str(selected["count"]), styles["metric_value"]),
             Paragraph("Documentos incluidos", styles["metric_detail"]),
         ],

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { quotationService } from '../services/quotation.service'
-import type { QuotationTemplateWriteRequest, QuotationWriteRequest } from '../types/quotation.types'
+import type { QuotationStatus, QuotationTemplateWriteRequest, QuotationWriteRequest } from '../types/quotation.types'
 
 export function useQuotations(params: Record<string, string | number | undefined>) {
   return useQuery({
@@ -18,10 +18,11 @@ export function useQuotation(id: string | undefined) {
   })
 }
 
-export function useQuotationTemplates() {
+export function useQuotationTemplates(enabled = true) {
   return useQuery({
     queryKey: ['quotation-templates'],
     queryFn: quotationService.listTemplates,
+    enabled,
   })
 }
 
@@ -59,6 +60,11 @@ export function useQuotationMutations() {
     update: useMutation({
       mutationFn: ({ id, payload }: { id: string; payload: QuotationWriteRequest }) =>
         quotationService.update(id, payload),
+      onSuccess: (_, values) => invalidate(values.id),
+    }),
+    updateStatus: useMutation({
+      mutationFn: ({ id, status }: { id: string; status: QuotationStatus }) =>
+        quotationService.updateStatus(id, status),
       onSuccess: (_, values) => invalidate(values.id),
     }),
   }

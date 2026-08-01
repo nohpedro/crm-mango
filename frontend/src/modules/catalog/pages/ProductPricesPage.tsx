@@ -7,9 +7,13 @@ import { PageHeading } from '../../../components/common/PageHeading'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { usePriceLevels, useProduct } from '../hooks/useCatalogQueries'
 import { catalogService } from '../services/catalog.service'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 
 export function ProductPricesPage() {
   const { id } = useParams()
+  const user = useAuthStore((state) => state.user)
+  const canAdd = hasPermission(user, 'products.add_productprice')
   const product = useProduct(id)
   const levels = usePriceLevels({
     search: '',
@@ -64,7 +68,7 @@ export function ProductPricesPage() {
           </Link>
         }
       />
-      <section className="mb-5 rounded-2xl border border-brand-100 bg-brand-50 p-5">
+      {canAdd && <section className="mb-5 rounded-2xl border border-brand-100 bg-brand-50 p-5">
         <h3 className="font-bold text-brand-900">Nueva regla de precio</h3>
         <p className="mt-1 text-sm text-brand-900/75">
           Ejemplo: nivel Mayorista, desde 3 unidades, precio especial Bs 15. El cotizador
@@ -102,7 +106,7 @@ export function ProductPricesPage() {
         >
           <Plus className="size-4" /> Guardar regla
         </button>
-      </section>
+      </section>}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">

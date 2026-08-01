@@ -10,6 +10,8 @@ import type {
   ImportMode,
   TransferResource,
 } from '../types/transfer.types'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 
 interface DataTransferPanelProps {
   resource: TransferResource
@@ -17,6 +19,16 @@ interface DataTransferPanelProps {
 }
 
 export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelProps) {
+  const user = useAuthStore((state) => state.user)
+  const permissionResource = {
+    clients: 'clients.client',
+    products: 'products.product',
+    warehouses: 'inventory.warehouse',
+    stocks: 'inventory.stock',
+  }[resource]
+  const [appLabel, model] = permissionResource.split('.')
+  const canImport = hasPermission(user, `${appLabel}.add_${model}`)
+  const canExport = hasPermission(user, `${appLabel}.view_${model}`)
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [mode, setMode] = useState<ImportMode>('partial')
@@ -126,23 +138,23 @@ export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelP
             {label}
           </h3>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-            Descarga la plantilla, completa sus columnas y carga el archivo. La
-            importación parcial guarda solo los registros válidos y nunca sobrescribe
-            información existente.
+            {canImport
+              ? 'Descarga la plantilla, completa sus columnas y carga el archivo. La importación parcial guarda solo los registros válidos.'
+              : 'Descarga la información actual en formato Excel.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
+          {canExport && <button
             type="button"
             disabled={busy}
             onClick={() => download('template')}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             <Download className="size-4" /> Descargar plantilla Excel
-          </button>
+          </button>}
         </div>
       </div>
-      <div
+      {canImport && <div
         role="button"
         tabIndex={0}
         onKeyDown={(event) => {
@@ -175,13 +187,14 @@ export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelP
           className="sr-only"
           onChange={(event) => validateFile(event.target.files?.[0] ?? null)}
         />
-      </div>
-      {file && (
+      </div>}
+      {canImport && file && (
         <p className="mt-3 text-sm font-semibold text-slate-700">
           Archivo seleccionado: <span className="font-normal">{file.name}</span>
         </p>
       )}
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        {canImport && <>
         <label className="text-sm font-semibold text-slate-700">
           Modo de importación
           <select
@@ -193,8 +206,9 @@ export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelP
             <option value="total">Total: guardar solo si todo es válido</option>
           </select>
         </label>
+        </>}
         <div className="flex flex-wrap gap-2">
-          <button
+          {canImport && <button
             type="button"
             aria-label="Procesar archivo seleccionado"
             disabled={!file || busy}
@@ -207,15 +221,15 @@ export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelP
               <FileUp className="size-4" />
             )}{' '}
             Procesar archivo
-          </button>
-          <button
+          </button>}
+          {canExport && <button
             type="button"
             disabled={busy}
             onClick={() => download('export')}
             className="inline-flex items-center gap-2 rounded-xl border border-brand-200 px-4 py-2.5 text-sm font-bold text-brand-700 hover:bg-brand-50 disabled:opacity-50"
           >
             <Download className="size-4" /> Exportar Excel
-          </button>
+          </button>}
         </div>
       </div>
       {error && (
@@ -268,7 +282,7 @@ export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelP
           )}
         </div>
       )}
-      <ConfirmDialog
+      {canImport && <ConfirmDialog
         open={confirmImport}
         title="¿Procesar este archivo?"
         description={
@@ -280,9 +294,11 @@ export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelP
         pending={busy}
         onClose={() => setConfirmImport(false)}
         onConfirm={importFile}
-      />
+      />}
       <ConfirmDialog
-        open={Boolean(missingReference)}
+        open={Boolean(missingReference) && (missingReference === 'category'
+          ? hasPermission(user, 'products.add_category')
+          : hasPermission(user, 'products.add_pricelevel'))}
         title={
           missingReference === 'category'
             ? 'Categoría no encontrada'

@@ -18,6 +18,7 @@ const dashboardResponse = {
     start: '2026-07-01',
     end: '2026-07-26',
   },
+  status: { key: 'all', label: 'Todos los estados' },
   sales: {
     day: { count: 3, total: '1200.00', average: '400.00' },
     week: { count: 8, total: '3500.00', average: '437.50' },
@@ -47,7 +48,7 @@ const dashboardResponse = {
       total: '3600.00',
     },
   ],
-  definition: 'Se consideran ventas las cotizaciones emitidas.',
+  definition: 'Se muestran cotizaciones pendientes y pagadas.',
 }
 
 describe('DashboardPage', () => {
@@ -154,6 +155,38 @@ describe('DashboardPage', () => {
       expect(url.searchParams.get('period')).toBe('custom')
       expect(url.searchParams.get('start_date')).toBeTruthy()
       expect(url.searchParams.get('end_date')).toBeTruthy()
+    })
+  })
+
+  it('filtra el panel y los reportes por estado de cotizaciÃ³n', async () => {
+    let lastUrl = ''
+    server.use(
+      http.get(
+        'http://localhost:8000/api/v1/quotations/dashboard/',
+        ({ request }) => {
+          lastUrl = request.url
+          return HttpResponse.json(dashboardResponse)
+        },
+      ),
+    )
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const user = userEvent.setup()
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('Constructora Andina')
+    await user.click(screen.getByRole('button', { name: 'Pagadas' }))
+
+    await waitFor(() => {
+      expect(new URL(lastUrl).searchParams.get('status')).toBe('paid')
     })
   })
 })

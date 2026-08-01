@@ -7,9 +7,15 @@ import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 import { PageHeading } from '../../../components/common/PageHeading'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { useProduct, useProductImageMutations } from '../hooks/useCatalogQueries'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 
 export function ProductImagesPage() {
   const { id } = useParams()
+  const user = useAuthStore((state) => state.user)
+  const canAdd = hasPermission(user, 'products.add_productimage')
+  const canChange = hasPermission(user, 'products.change_productimage')
+  const canDelete = hasPermission(user, 'products.delete_productimage')
   const query = useProduct(id)
   const mutations = useProductImageMutations(id)
   const [files, setFiles] = useState<File[]>([])
@@ -90,7 +96,7 @@ export function ProductImagesPage() {
           </Link>
         }
       />
-      <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 shadow-sm sm:p-7">
+      {canAdd && <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 shadow-sm sm:p-7">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h3 className="font-bold text-slate-900">Agregar imágenes</h3>
@@ -136,7 +142,7 @@ export function ProductImagesPage() {
         {uploadError && (
           <p className="mt-2 text-xs font-semibold text-red-600">{uploadError}</p>
         )}
-      </section>
+      </section>}
 
       <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
         <div className="flex items-center justify-between gap-3">
@@ -168,7 +174,11 @@ export function ProductImagesPage() {
                   )}
                 </div>
                 <div className="flex items-center justify-between gap-2 p-3">
-                  {!image.is_primary ? (
+                  {image.is_primary ? (
+                    <span className="text-xs font-semibold text-slate-400">
+                      Imagen principal
+                    </span>
+                  ) : canChange ? (
                     <button
                       type="button"
                       disabled={busy}
@@ -177,12 +187,8 @@ export function ProductImagesPage() {
                     >
                       Usar como portada
                     </button>
-                  ) : (
-                    <span className="text-xs font-semibold text-slate-400">
-                      Imagen principal
-                    </span>
-                  )}
-                  <button
+                  ) : null}
+                  {canDelete && <button
                     type="button"
                     aria-label={`Quitar imagen de ${product.name}`}
                     disabled={busy}
@@ -190,7 +196,7 @@ export function ProductImagesPage() {
                     className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >
                     <Trash2 className="size-4" />
-                  </button>
+                  </button>}
                 </div>
               </article>
             ))}

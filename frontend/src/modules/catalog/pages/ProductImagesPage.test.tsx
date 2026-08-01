@@ -6,10 +6,13 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 
 import { server } from '../../../test/server'
+import { useAuthStore } from '../../../store/authStore'
+import { adminUser } from '../../../test/factories'
 import { ProductImagesPage } from './ProductImagesPage'
 
 describe('ProductImagesPage', () => {
   it('muestra varias imágenes y permite elegir la portada', async () => {
+    useAuthStore.setState({ status: 'authenticated', user: adminUser })
     let requestBody: Record<string, unknown> | null = null
     server.use(
       http.get('http://localhost:8000/api/v1/catalog/products/product-1/', () =>

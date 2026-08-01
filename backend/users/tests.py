@@ -63,6 +63,13 @@ class AuthenticationAPITests(APITestCase):
         self.assertTrue(response.data)
         self.assertNotIn("admin", {item["app_label"] for item in response.data})
         self.assertNotIn("auth", {item["app_label"] for item in response.data})
+        quotation_permissions = {
+            item["codename"]
+            for item in response.data
+            if item["app_label"] == "quotations" and item["model"] == "quotation"
+        }
+        self.assertIn("configure_quotation_document", quotation_permissions)
+        self.assertIn("manage_quotation_templates", quotation_permissions)
 
     def test_login_rejects_invalid_credentials(self):
         response = self.client.post(
@@ -155,6 +162,39 @@ class RolePermissionAPITests(APITestCase):
 
         self.assertEqual(allowed.status_code, status.HTTP_200_OK)
         self.assertEqual(rejected.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_user_and_role_screens_use_assigned_permissions(self):
+        users_denied = self.client.get("/api/v1/users/")
+        roles_denied = self.client.get("/api/v1/roles/")
+        self.assertEqual(users_denied.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(roles_denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.user.role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="users",
+                codename="view_user",
+            ),
+            Permission.objects.get(
+                content_type__app_label="users",
+                codename="view_role",
+            ),
+        )
+
+        self.assertEqual(self.client.get("/api/v1/users/").status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.get("/api/v1/roles/").status_code, status.HTTP_200_OK)
+
+    def test_permission_catalog_requires_role_management_permission(self):
+        denied = self.client.get("/api/v1/permissions/")
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.user.role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="users",
+                codename="change_role",
+            )
+        )
+        allowed = self.client.get("/api/v1/permissions/")
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK)
 
 
 class DemoUserSeedCommandTests(APITestCase):

@@ -26,11 +26,13 @@ class QuotationTemplateViewSet(viewsets.ModelViewSet):
     pagination_class = None
 
     def get_permissions(self):
-        self.required_permission = (
-            "quotations.view_quotation"
-            if self.action in {"list", "retrieve"}
-            else "quotations.change_quotation"
-        )
+        if self.action in {"list", "retrieve"}:
+            self.required_any_permissions = (
+                "quotations.configure_quotation_document",
+                "quotations.manage_quotation_templates",
+            )
+        else:
+            self.required_permission = "quotations.manage_quotation_templates"
         return [HasRoleModelPermission()]
 
 
@@ -45,7 +47,7 @@ class QuotationTemplateImageViewSet(viewsets.ModelViewSet):
         return queryset.filter(template_id=template_id) if template_id else queryset
 
     def get_permissions(self):
-        self.required_permission = "quotations.change_quotation"
+        self.required_permission = "quotations.manage_quotation_templates"
         return [HasRoleModelPermission()]
 
 
@@ -84,6 +86,7 @@ class QuotationViewSet(viewsets.ModelViewSet):
                 request.query_params.get("period", "month"),
                 start_date=request.query_params.get("start_date"),
                 end_date=request.query_params.get("end_date"),
+                quotation_status=request.query_params.get("status", "all"),
             )
         except ValueError as error:
             return Response({"detail": str(error)}, status=400)
@@ -97,6 +100,7 @@ class QuotationViewSet(viewsets.ModelViewSet):
                 period,
                 start_date=request.query_params.get("start_date"),
                 end_date=request.query_params.get("end_date"),
+                quotation_status=request.query_params.get("status", "all"),
             )
         except ValueError as error:
             return Response({"detail": str(error)}, status=400)
@@ -114,6 +118,7 @@ class QuotationViewSet(viewsets.ModelViewSet):
                 period,
                 start_date=request.query_params.get("start_date"),
                 end_date=request.query_params.get("end_date"),
+                quotation_status=request.query_params.get("status", "all"),
             )
         except ValueError as error:
             return Response({"detail": str(error)}, status=400)

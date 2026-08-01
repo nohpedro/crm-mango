@@ -22,6 +22,7 @@ import type {
   DashboardPeriod,
   DashboardRange,
   DashboardSeriesItem,
+  DashboardStatus,
   SalesSummary,
   StandardDashboardPeriod,
 } from '../types/dashboard.types'
@@ -42,10 +43,8 @@ const money = (value: string | number) =>
     maximumFractionDigits: 2,
   })}`
 
-const quotationCount = (count: number, issued = false) =>
-  `${count} ${count === 1 ? 'cotización' : 'cotizaciones'}${
-    issued ? (count === 1 ? ' emitida' : ' emitidas') : ''
-  }`
+const quotationCount = (count: number) =>
+  `${count} ${count === 1 ? 'cotización' : 'cotizaciones'}`
 
 const localIsoDate = (value = new Date()) => {
   const year = value.getFullYear()
@@ -68,10 +67,11 @@ export function DashboardPage() {
   const user = useAuthStore((state) => state.user)
   const canViewReports = hasPermission(user, 'quotations.view_quotation')
   const [period, setPeriod] = useState<DashboardPeriod>('month')
+  const [statusFilter, setStatusFilter] = useState<DashboardStatus>('all')
   const [rangeDraft, setRangeDraft] = useState(initialRange)
   const [appliedRange, setAppliedRange] = useState(initialRange)
   const [downloading, setDownloading] = useState<'pdf' | 'csv' | null>(null)
-  const report = useDashboard(period, appliedRange, canViewReports)
+  const report = useDashboard(period, appliedRange, statusFilter, canViewReports)
 
   const applyCustomRange = () => {
     const start = new Date(`${rangeDraft.start_date}T00:00:00`)
@@ -98,8 +98,8 @@ export function DashboardPage() {
     try {
       const blob =
         format === 'pdf'
-          ? await dashboardService.downloadPdf(period, appliedRange)
-          : await dashboardService.downloadCsv(period, appliedRange)
+          ? await dashboardService.downloadPdf(period, appliedRange, statusFilter)
+          : await dashboardService.downloadCsv(period, appliedRange, statusFilter)
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
@@ -166,8 +166,8 @@ export function DashboardPage() {
         <div>
           <p className="font-bold text-brand-900">¿Qué información se muestra?</p>
           <p className="mt-1 text-sm text-brand-800">
-            Se consideran ventas únicamente las cotizaciones emitidas. Los
-            borradores y las cotizaciones anuladas no se incluyen.
+            Filtra las cotizaciones por estado y periodo. El mismo filtro se
+            aplicará al panel, al reporte PDF y a los datos CSV.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -198,6 +198,40 @@ export function DashboardPage() {
             Descargar datos CSV
           </button>
         </div>
+      </section>
+
+      <section className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
+        <span className="text-sm font-bold text-slate-700">Estado:</span>
+        {([
+          ['all', 'Todas'],
+          ['pending', 'Pendientes'],
+          ['paid', 'Pagadas'],
+        ] as Array<[DashboardStatus, string]>).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setStatusFilter(key)}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+              statusFilter === key
+                ? key === 'paid'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : key === 'pending'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-brand-700 text-white shadow-sm'
+                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="text-xs text-slate-500 sm:ml-auto">
+          Mostrando:{' '}
+          {statusFilter === 'all'
+            ? 'todos los estados'
+            : statusFilter === 'paid'
+              ? 'solo pagadas'
+              : 'solo pendientes'}
+        </span>
       </section>
 
       <div className="mb-5 flex flex-wrap items-center gap-2">
@@ -320,10 +354,10 @@ export function DashboardPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="font-bold text-slate-900">
-                    Ventas de {report.data.period.label.toLowerCase()}
+                    Cotizaciones de {report.data.period.label.toLowerCase()}
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Evolución diaria de las cotizaciones emitidas.
+                    Evolución diaria según el estado seleccionado.
                   </p>
                 </div>
                 <div className="text-right">
@@ -394,7 +428,7 @@ export function DashboardPage() {
               title="Clientes con más cotizaciones"
               description="Clientes con mayor actividad durante el periodo."
               icon={UsersRound}
-              empty="Todavía no hay clientes con cotizaciones emitidas."
+              empty="Todavía no hay clientes con cotizaciones para este filtro."
               rows={report.data.top_clients.map((item) => ({
                 key: item.client_id ?? `${item.client_tax_id}-${item.client_name}`,
                 title: item.client_name,
@@ -437,7 +471,7 @@ function SalesCard({
             {money(summary.total)}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            {quotationCount(summary.count, true)}
+            {quotationCount(summary.count)}
           </p>
         </div>
         <div
@@ -511,7 +545,7 @@ function SalesChart({ values }: { values: DashboardSeriesItem[] }) {
       </div>
       {!hasSales && (
         <p className="mt-4 text-center text-sm text-slate-500">
-          No hay cotizaciones emitidas en este periodo.
+          No hay cotizaciones para este periodo y estado.
         </p>
       )}
     </div>

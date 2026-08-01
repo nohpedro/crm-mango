@@ -4,6 +4,7 @@ from django.db import transaction
 from rest_framework import serializers
 
 from products.models import PriceTier, ProductPrice
+from users.permissions import HasRoleModelPermission
 
 from .models import Quotation, QuotationItem, QuotationTemplate, QuotationTemplateImage
 from .template_defaults import (
@@ -142,13 +143,21 @@ class QuotationSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        client = attrs.get("client")
-        if client and not attrs.get("client_name"):
+        if ({"template", "valid_days"} & attrs.keys()) and not self._can_configure_document():
+            raise serializers.ValidationError({
+                "template": "No tienes permiso para cambiar la configuración del documento."
+            })
+        client = attrs.get("client", getattr(self.instance, "client", None))
+        if "client" in attrs and client and not attrs.get("client_name"):
             attrs.update({
                 "client_name": client.name, "client_tax_id": client.tax_id,
                 "client_phone": client.whatsapp, "client_address": f"{client.city_zone}, {client.department}",
             })
-        if not attrs.get("client_name"):
+        client_name = attrs.get(
+            "client_name",
+            getattr(self.instance, "client_name", ""),
+        )
+        if not client_name:
             raise serializers.ValidationError({"client_name": "Indica el nombre del cliente."})
         return attrs
 
@@ -156,6 +165,10 @@ class QuotationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         items = validated_data.pop("items")
         total_quantity = sum(item["quantity"] for item in items)
+        if "template" not in validated_data:
+            validated_data["template"] = (
+                QuotationTemplate.objects.filter(is_active=True, is_default=True).first()
+            )
         validated_data["template_snapshot"] = self._template_snapshot(validated_data.get("template"))
         quotation = Quotation.objects.create(**validated_data)
         for item in items:
@@ -176,6 +189,19 @@ class QuotationSerializer(serializers.ModelSerializer):
             for item in items:
                 create_priced_item(instance, item, total_quantity)
         return instance
+
+    def _can_configure_document(self):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        return any(
+            HasRoleModelPermission._has_permission(user, permission)
+            for permission in (
+                "quotations.configure_quotation_document",
+                "quotations.manage_quotation_templates",
+            )
+        )
 
     @staticmethod
     def _template_snapshot(template):

@@ -46,7 +46,13 @@ class QuotationApiTests(APITestCase):
         role.permissions.add(
             *Permission.objects.filter(
                 content_type__app_label="quotations",
-                codename__in=["add_quotation", "view_quotation", "change_quotation"],
+                codename__in=[
+                    "add_quotation",
+                    "view_quotation",
+                    "change_quotation",
+                    "configure_quotation_document",
+                    "manage_quotation_templates",
+                ],
             )
         )
         self.user = get_user_model().objects.create_user(
@@ -74,9 +80,73 @@ class QuotationApiTests(APITestCase):
             "client_address": "Centro, La Paz",
             "valid_days": 7,
             "notes": "Entrega coordinada.",
-            "status": "issued",
+            "status": "pending",
             "items": [{"product": self.product.id, "quantity": 2, "unit_price": "250.50"}],
         }
+
+    def test_document_configuration_requires_its_own_permission(self):
+        limited_role = Role.objects.create(name="Cotizador básico", code="BASIC_SALES")
+        limited_role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="quotations",
+                codename="add_quotation",
+            )
+        )
+        limited_user = get_user_model().objects.create_user(
+            username="basic-sales",
+            email="basic-sales@example.com",
+            password="safe-password",
+            role=limited_role,
+        )
+        self.client.force_authenticate(limited_user)
+
+        rejected = self.client.post("/api/v1/quotations/", self.payload(), format="json")
+        self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("template", rejected.data)
+
+        payload = self.payload()
+        payload.pop("valid_days")
+        accepted = self.client.post("/api/v1/quotations/", payload, format="json")
+        self.assertEqual(accepted.status_code, status.HTTP_201_CREATED)
+
+    def test_template_permissions_are_independent_from_editing_quotations(self):
+        template = QuotationTemplate.objects.create(name="Plantilla protegida")
+        role = Role.objects.create(name="Configura documentos", code="DOC_CONFIG")
+        role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="quotations",
+                codename="configure_quotation_document",
+            )
+        )
+        user = get_user_model().objects.create_user(
+            username="doc-config",
+            email="doc-config@example.com",
+            password="safe-password",
+            role=role,
+        )
+        self.client.force_authenticate(user)
+
+        listed = self.client.get("/api/v1/quotations/templates/")
+        self.assertEqual(listed.status_code, status.HTTP_200_OK)
+        denied = self.client.patch(
+            f"/api/v1/quotations/templates/{template.pk}/",
+            {"name": "No permitido"},
+            format="json",
+        )
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="quotations",
+                codename="manage_quotation_templates",
+            )
+        )
+        allowed = self.client.patch(
+            f"/api/v1/quotations/templates/{template.pk}/",
+            {"name": "Plantilla administrada"},
+            format="json",
+        )
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK)
 
     def test_creates_and_generates_both_pdf_formats(self):
         response = self.client.post("/api/v1/quotations/", self.payload(), format="json")
@@ -258,28 +328,57 @@ class QuotationApiTests(APITestCase):
         self.assertNotIn("client", [section["key"] for section in pages[1][0]])
         self.assertEqual(page_count, 2)
 
-    def test_new_quotation_is_issued_when_status_is_omitted(self):
+    def test_new_quotation_is_pending_when_status_is_omitted(self):
         payload = self.payload()
         payload.pop("status")
 
         response = self.client.post("/api/v1/quotations/", payload, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["status"], Quotation.Status.ISSUED)
+        self.assertEqual(response.data["status"], Quotation.Status.PENDING)
 
-    def test_dashboard_reports_only_issued_quotations(self):
-        issued = self.client.post("/api/v1/quotations/", self.payload(), format="json")
-        self.assertEqual(issued.status_code, status.HTTP_201_CREATED)
-        cancelled_payload = self.payload()
-        cancelled_payload["status"] = "cancelled"
-        cancelled = self.client.post(
+    def test_status_can_be_changed_with_a_partial_update(self):
+        created = self.client.post(
             "/api/v1/quotations/",
-            cancelled_payload,
+            self.payload(),
             format="json",
         )
-        self.assertEqual(cancelled.status_code, status.HTTP_201_CREATED)
 
-        response = self.client.get("/api/v1/quotations/dashboard/?period=month")
+        response = self.client.patch(
+            f"/api/v1/quotations/{created.data['id']}/",
+            {"status": "paid"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Quotation.Status.PAID)
+        self.assertEqual(response.data["client_name"], self.customer.name)
+
+        response = self.client.patch(
+            f"/api/v1/quotations/{created.data['id']}/",
+            {"status": "pending"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Quotation.Status.PENDING)
+        self.assertEqual(response.data["client_name"], self.customer.name)
+
+    def test_dashboard_filters_quotations_by_status(self):
+        pending = self.client.post("/api/v1/quotations/", self.payload(), format="json")
+        self.assertEqual(pending.status_code, status.HTTP_201_CREATED)
+        paid_payload = self.payload()
+        paid_payload["status"] = "paid"
+        paid = self.client.post(
+            "/api/v1/quotations/",
+            paid_payload,
+            format="json",
+        )
+        self.assertEqual(paid.status_code, status.HTTP_201_CREATED)
+
+        response = self.client.get(
+            "/api/v1/quotations/dashboard/?period=month&status=paid"
+        )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["sales"]["day"]["count"], 1)
@@ -291,12 +390,12 @@ class QuotationApiTests(APITestCase):
             self.customer.name,
         )
 
-    def test_notifications_report_draft_quotations(self):
-        draft_payload = self.payload()
-        draft_payload["status"] = "draft"
+    def test_notifications_report_pending_quotations(self):
+        pending_payload = self.payload()
+        pending_payload["status"] = "pending"
         created = self.client.post(
             "/api/v1/quotations/",
-            draft_payload,
+            pending_payload,
             format="json",
         )
         self.assertEqual(created.status_code, status.HTTP_201_CREATED)
@@ -305,10 +404,10 @@ class QuotationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["items"][0]["id"], "draft-quotations")
+        self.assertEqual(response.data["items"][0]["id"], "pending-quotations")
         self.assertEqual(
             response.data["items"][0]["path"],
-            "/quotations/history?status=draft",
+            "/quotations/history?status=pending",
         )
 
     def test_downloads_dashboard_pdf_and_raw_csv(self):

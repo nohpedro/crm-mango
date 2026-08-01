@@ -7,7 +7,7 @@ import { AdminTable, Pagination } from '../../admin/components/AdminTable'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { useClients } from '../hooks/useClients'
 import { useAuthStore } from '../../../store/authStore'
-import { hasPermission } from '../../../utils/permissions'
+import { hasAnyPermission, hasPermission } from '../../../utils/permissions'
 
 export function ClientsPage() {
   const [search, setSearch] = useState('')
@@ -31,7 +31,7 @@ export function ClientsPage() {
                 <Plus className="size-4" /> Nuevo cliente
               </Link>
             )}
-            {hasPermission(user, 'clients.add_client') && (
+            {hasAnyPermission(user, ['clients.view_client', 'clients.add_client']) && (
               <Link
                 to={`/clients/import-export${search ? `?search=${encodeURIComponent(search)}` : ''}`}
                 className="inline-flex items-center gap-2 rounded-xl border border-brand-200 px-4 py-3 text-sm font-bold text-brand-700 hover:bg-brand-50"

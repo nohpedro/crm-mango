@@ -21,10 +21,10 @@ describe('Header', () => {
           count: 1,
           items: [
             {
-              id: 'draft-quotations',
+              id: 'pending-quotations',
               title: 'Cotizaciones pendientes',
               message: '1 cotización en borrador.',
-              path: '/quotations/history?status=draft',
+              path: '/quotations/history?status=pending',
               tone: 'warning',
             },
           ],

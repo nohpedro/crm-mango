@@ -9,7 +9,7 @@ import { ProductPricesModal } from '../components/ProductPricesModal'
 import { useCatalogFilters } from '../hooks/useCatalogFilters'
 import { useCategories, useProduct, useProducts } from '../hooks/useCatalogQueries'
 import { useAuthStore } from '../../../store/authStore'
-import { hasPermission } from '../../../utils/permissions'
+import { hasAnyPermission, hasPermission } from '../../../utils/permissions'
 
 export function ProductsPage() {
   const location = useLocation()
@@ -33,7 +33,7 @@ export function ProductsPage() {
         description="Administra el catálogo, el estado y la disponibilidad comercial."
         action={
           <div className="flex flex-wrap gap-2">
-            {hasPermission(user, 'products.add_product') && (
+            {hasAnyPermission(user, ['products.view_product', 'products.add_product']) && (
               <Link
                 to={{ pathname: '/products/import-export', search: location.search }}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-brand-200 px-4 py-3 text-sm font-bold text-brand-700 hover:bg-brand-50"

@@ -7,6 +7,7 @@ import type {
   QuotationTemplate,
   QuotationTemplateImage,
   QuotationTemplateWriteRequest,
+  QuotationStatus,
 } from '../types/quotation.types'
 
 export const quotationService = {
@@ -17,6 +18,11 @@ export const quotationService = {
     requestHandler.post<Quotation, QuotationWriteRequest>('quotations/', payload),
   update: (id: string, payload: QuotationWriteRequest) =>
     requestHandler.put<Quotation, QuotationWriteRequest>(`quotations/${id}/`, payload),
+  updateStatus: (id: string, status: QuotationStatus) =>
+    requestHandler.patch<Quotation, { status: QuotationStatus }>(
+      `quotations/${id}/`,
+      { status },
+    ),
   downloadPdf: (id: string, paper: PaperFormat) =>
     requestHandler.download(`quotations/${id}/pdf/`, { params: { paper } }),
   listTemplates: () => requestHandler.get<QuotationTemplate[]>('quotations/templates/'),

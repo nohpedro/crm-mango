@@ -5,7 +5,11 @@ import { PageHeading } from '../../../components/common/PageHeading'
 import { AdminTable, Pagination } from '../../admin/components/AdminTable'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { useMovements } from '../hooks/useInventory'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 export function MovementsPage() {
+  const user = useAuthStore((state) => state.user)
+  const canAdd = hasPermission(user, 'inventory.add_stockmovement')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const q = useMovements({ search, page })
@@ -20,12 +24,12 @@ export function MovementsPage() {
             <Link to="/inventory" className="text-sm font-bold text-brand-700">
               ← Regresar
             </Link>
-            <Link
+            {canAdd && <Link
               to="/inventory/movements/new"
               className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white"
             >
               <Plus className="size-4" /> Registrar movimiento
-            </Link>
+            </Link>}
           </div>
         }
       />

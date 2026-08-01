@@ -1,5 +1,6 @@
 export type DashboardPeriod = 'day' | 'week' | 'month' | 'custom'
 export type StandardDashboardPeriod = Exclude<DashboardPeriod, 'custom'>
+export type DashboardStatus = 'all' | 'pending' | 'paid'
 
 export interface DashboardRange {
   start_date?: string
@@ -43,6 +44,10 @@ export interface DashboardData {
     label: string
     start: string
     end: string
+  }
+  status: {
+    key: DashboardStatus
+    label: string
   }
   sales: Record<StandardDashboardPeriod, SalesSummary>
   selected: SalesSummary

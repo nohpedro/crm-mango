@@ -9,8 +9,13 @@ import { getAdminErrorMessage } from '../components/AdminError'
 import { AdminTable, Pagination } from '../components/AdminTable'
 import { useListFilters } from '../hooks/useListFilters'
 import { useRoleMutations, useRoles } from '../hooks/useAdminQueries'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 
 export function RolesPage() {
+  const user = useAuthStore((state) => state.user)
+  const canAdd = hasPermission(user, 'users.add_role')
+  const canChange = hasPermission(user, 'users.change_role')
   const { filters, update } = useListFilters()
   const query = useRoles(filters)
   const { update: updateRole } = useRoleMutations()
@@ -38,12 +43,12 @@ export function RolesPage() {
         title="Roles y permisos"
         description="Define perfiles de acceso y asigna permisos del sistema."
         action={
-          <Link
+          canAdd ? <Link
             to="/roles/new"
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
           >
             <Plus className="size-4" /> Nuevo rol
-          </Link>
+          </Link> : null
         }
       />
       <section className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
@@ -111,13 +116,13 @@ export function RolesPage() {
             </td>
             <td className="whitespace-nowrap px-5 py-4">
               <div className="flex items-center gap-3">
-                <Link
+                {canChange && <Link
                   to={`/roles/${role.id}/edit`}
                   className="text-xs font-bold text-brand-600 hover:text-brand-800"
                 >
                   Editar
-                </Link>
-                <button
+                </Link>}
+                {canChange && <button
                   type="button"
                   disabled={updateRole.isPending}
                   onClick={() =>
@@ -130,7 +135,7 @@ export function RolesPage() {
                   className="text-xs font-bold text-slate-500 hover:text-slate-800 disabled:opacity-50"
                 >
                   {role.is_active ? 'Desactivar' : 'Activar'}
-                </button>
+                </button>}
               </div>
             </td>
           </tr>

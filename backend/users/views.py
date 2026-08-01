@@ -64,7 +64,7 @@ from .serializers import (
 )
 class RoleViewSet(viewsets.ModelViewSet):
     serializer_class = RoleSerializer
-    permission_classes = [IsAdministrator]
+    permission_classes = [HasRoleModelPermission]
 
     queryset = (
         Role.objects
@@ -161,7 +161,7 @@ class RoleViewSet(viewsets.ModelViewSet):
     ),
 )
 class UserViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdministrator]
+    permission_classes = [HasRoleModelPermission]
 
     queryset = (
         User.objects
@@ -235,20 +235,20 @@ class SystemNotificationsAPIView(APIView):
 
         items = []
         if can("quotations.view_quotation"):
-            draft_count = Quotation.objects.filter(
-                status=Quotation.Status.DRAFT
+            pending_count = Quotation.objects.filter(
+                status=Quotation.Status.PENDING
             ).count()
-            if draft_count:
+            if pending_count:
                 items.append(
                     {
-                        "id": "draft-quotations",
+                        "id": "pending-quotations",
                         "title": "Cotizaciones pendientes",
                         "message": (
-                            f"{draft_count} "
-                            f"{'cotización' if draft_count == 1 else 'cotizaciones'} "
-                            "en borrador."
+                            f"{pending_count} "
+                            f"{'cotización' if pending_count == 1 else 'cotizaciones'} "
+                            "pendientes de pago."
                         ),
-                        "path": "/quotations/history?status=draft",
+                        "path": "/quotations/history?status=pending",
                         "tone": "warning",
                     }
                 )
@@ -446,7 +446,8 @@ class CurrentUserAPIView(APIView):
 
 
 class PermissionListAPIView(APIView):
-    permission_classes = [IsAdministrator]
+    permission_classes = [HasRoleModelPermission]
+    required_any_permissions = ("users.add_role", "users.change_role")
 
     @extend_schema(
         tags=["Roles"],

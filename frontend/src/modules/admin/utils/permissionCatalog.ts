@@ -101,6 +101,11 @@ const actionLabels: Record<string, string> = {
   view: 'Ver',
 }
 
+const customPermissionLabels: Record<string, string> = {
+  configure_quotation_document: 'Configurar documento',
+  manage_quotation_templates: 'Administrar plantillas',
+}
+
 export type FriendlyPermission = Permission & {
   area: string
   resourceLabel: string
@@ -112,7 +117,7 @@ export type FriendlyPermission = Permission & {
 export function getFriendlyPermission(permission: Permission): FriendlyPermission | null {
   const resource = resources[`${permission.app_label}.${permission.model}`]
   const action = permission.codename.split('_')[0]
-  const actionLabel = actionLabels[action]
+  const actionLabel = customPermissionLabels[permission.codename] ?? actionLabels[action]
   if (!resource || !actionLabel) return null
 
   return {

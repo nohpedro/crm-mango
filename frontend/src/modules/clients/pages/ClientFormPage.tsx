@@ -12,6 +12,8 @@ import { usePriceLevels } from '../../catalog/hooks/useCatalogQueries'
 import { clientService } from '../services/client.service'
 import { clientSchema, type ClientFormValues } from '../schemas/client.schemas'
 import type { ClientType } from '../types/client.types'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 
 const empty: ClientFormValues = {
   name: '',
@@ -30,6 +32,8 @@ export function ClientFormPage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const editing = Boolean(id)
+  const user = useAuthStore((state) => state.user)
+  const canAddClientType = hasPermission(user, 'clients.add_clienttype')
   const [types, setTypes] = useState<ClientType[]>([])
   const [typeModal, setTypeModal] = useState(false)
   const [newType, setNewType] = useState('')
@@ -142,14 +146,14 @@ export function ClientFormPage() {
                   </option>
                 ))}
               </select>
-              <button
+              {canAddClientType && <button
                 type="button"
                 title="Crear tipo de cliente"
                 onClick={() => setTypeModal(true)}
                 className="rounded-xl border border-brand-200 px-3 text-brand-700 hover:bg-brand-50"
               >
                 <Plus className="size-4" />
-              </button>
+              </button>}
             </div>
           </Field>
           <Field label="Nivel de precio" error={errors.price_level?.message}>
@@ -185,7 +189,7 @@ export function ClientFormPage() {
           />
         </div>
       </form>
-      {typeModal && (
+      {typeModal && canAddClientType && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4">
           <section
             role="dialog"

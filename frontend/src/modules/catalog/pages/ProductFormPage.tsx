@@ -16,6 +16,8 @@ import {
   useProductMutations,
 } from '../hooks/useCatalogQueries'
 import { productSchema, type ProductFormValues } from '../schemas/catalog.schemas'
+import { useAuthStore } from '../../../store/authStore'
+import { hasAnyPermission, hasPermission } from '../../../utils/permissions'
 
 const empty: ProductFormValues = {
   category: '',
@@ -30,6 +32,15 @@ const empty: ProductFormValues = {
 export function ProductFormPage() {
   const { id } = useParams()
   const editing = Boolean(id)
+  const user = useAuthStore((state) => state.user)
+  const canAddImages = hasPermission(user, 'products.add_productimage')
+  const canManageImages = hasAnyPermission(user, [
+    'products.view_productimage',
+    'products.add_productimage',
+    'products.change_productimage',
+    'products.delete_productimage',
+  ])
+  const canArchive = hasPermission(user, 'products.delete_product')
   const navigate = useNavigate()
   const productQuery = useProduct(id)
   const categoriesQuery = useCategories({
@@ -214,7 +225,7 @@ export function ProductFormPage() {
             )}
           </label>
         </div>
-        <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4">
+        {canAddImages && <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4">
           <label className="block text-sm font-semibold text-slate-700">
             Imágenes del producto{' '}
             <span className="font-normal text-slate-500">(opcional)</span>
@@ -260,7 +271,7 @@ export function ProductFormPage() {
           {imageError && (
             <p className="mt-2 text-xs font-semibold text-red-600">{imageError}</p>
           )}
-          {editing && id && (
+          {editing && id && canManageImages && (
             <p className="mt-3 text-xs text-slate-500">
               Para cambiar la portada o quitar imágenes, usa{' '}
               <Link className="font-bold text-brand-700" to={`/products/${id}/images`}>
@@ -269,7 +280,14 @@ export function ProductFormPage() {
               .
             </p>
           )}
-        </div>
+        </div>}
+        {editing && id && canManageImages && !canAddImages && (
+          <p className="mt-4 text-sm text-slate-600">
+            <Link className="font-bold text-brand-700" to={`/products/${id}/images`}>
+              Administrar imágenes del producto
+            </Link>
+          </p>
+        )}
         <div className="mt-7">
           <AdminFormActions
             pending={mutation.isPending}
@@ -277,7 +295,7 @@ export function ProductFormPage() {
             label={editing ? 'Guardar cambios' : 'Crear producto'}
           />
         </div>
-        {editing && !productQuery.data?.deleted_at && (
+        {editing && canArchive && !productQuery.data?.deleted_at && (
           <div className="mt-5 border-t border-red-100 pt-5">
             <p className="text-sm font-semibold text-slate-700">Archivar producto</p>
             <p className="mt-1 text-xs leading-5 text-slate-500">

@@ -2,15 +2,19 @@ import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 
 import { useAuthStore } from '../store/authStore'
-import { hasAnyPermission } from '../utils/permissions'
+import { hasAnyPermission, hasPermission } from '../utils/permissions'
 
 export function PermissionGate({
   anyOf,
+  allOf,
   children,
 }: {
-  anyOf: string[]
+  anyOf?: string[]
+  allOf?: string[]
   children: ReactNode
 }) {
   const user = useAuthStore((state) => state.user)
-  return hasAnyPermission(user, anyOf) ? <>{children}</> : <Navigate to="/unauthorized" replace />
+  const hasAny = hasAnyPermission(user, anyOf)
+  const hasAll = (allOf ?? []).every((permission) => hasPermission(user, permission))
+  return hasAny && hasAll ? <>{children}</> : <Navigate to="/unauthorized" replace />
 }

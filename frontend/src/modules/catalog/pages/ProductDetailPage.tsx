@@ -8,9 +8,21 @@ import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { useProduct, useProductMutations } from '../hooks/useCatalogQueries'
 import { ProductPricesModal } from '../components/ProductPricesModal'
+import { useAuthStore } from '../../../store/authStore'
+import { hasAnyPermission, hasPermission } from '../../../utils/permissions'
 
 export function ProductDetailPage() {
   const { id } = useParams()
+  const user = useAuthStore((state) => state.user)
+  const canChange = hasPermission(user, 'products.change_product')
+  const canRestore = canChange
+  const canManagePrices = hasPermission(user, 'products.change_productprice')
+  const canManageImages = hasAnyPermission(user, [
+    'products.view_productimage',
+    'products.add_productimage',
+    'products.change_productimage',
+    'products.delete_productimage',
+  ])
   const query = useProduct(id)
   const mutations = useProductMutations()
   const [pricesOpen, setPricesOpen] = useState(false)
@@ -69,12 +81,12 @@ export function ProductDetailPage() {
             >
               <ArrowLeft className="size-4" /> Volver
             </Link>
-            <Link
+            {canChange && <Link
               to={`/products/${product.id}/edit`}
               className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
             >
               <Edit3 className="size-4" /> Editar
-            </Link>
+            </Link>}
           </div>
         }
       />
@@ -147,7 +159,7 @@ export function ProductDetailPage() {
             continuar.
           </p>
           <div className="mt-5 grid gap-2">
-            {product.deleted_at ? (
+            {product.deleted_at && canRestore ? (
               <button
                 type="button"
                 onClick={() => runAction('restore', 'Restaurar')}
@@ -158,19 +170,19 @@ export function ProductDetailPage() {
             ) : null}
           </div>
           <div className="mt-6 border-t border-slate-100 pt-5">
-            <button
+            {canManagePrices && <button
               type="button"
               onClick={() => setPricesOpen(true)}
               className="inline-flex items-center gap-2 text-sm font-bold text-brand-600 hover:text-brand-800"
             >
               <DollarSign className="size-4" /> Precios
-            </button>
-            <Link
+            </button>}
+            {canManageImages && <Link
               to={`/products/${product.id}/images`}
               className="mt-3 block text-sm font-bold text-brand-600 hover:text-brand-800"
             >
               Administrar imágenes →
-            </Link>
+            </Link>}
           </div>
         </section>
       </div>
@@ -184,7 +196,7 @@ export function ProductDetailPage() {
         onClose={() => setPendingAction(null)}
         onConfirm={confirmAction}
       />
-      {pricesOpen && <ProductPricesModal product={product} onClose={() => setPricesOpen(false)} />}
+      {pricesOpen && canManagePrices && <ProductPricesModal product={product} onClose={() => setPricesOpen(false)} />}
     </>
   )
 }

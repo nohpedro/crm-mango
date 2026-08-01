@@ -10,6 +10,8 @@ import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { usePriceLevel } from '../hooks/useCatalogQueries'
 import { catalogService } from '../services/catalog.service'
 import type { PriceTier } from '../types/catalog.types'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 
 type EditingTier = {
   id: string
@@ -18,6 +20,10 @@ type EditingTier = {
 
 export function PriceLevelRulesPage() {
   const { id } = useParams()
+  const user = useAuthStore((state) => state.user)
+  const canAdd = hasPermission(user, 'products.add_pricetier')
+  const canChange = hasPermission(user, 'products.change_pricetier')
+  const canDelete = hasPermission(user, 'products.delete_pricetier')
   const level = usePriceLevel(id)
   const cache = useQueryClient()
   const tiers = useQuery({
@@ -160,7 +166,7 @@ export function PriceLevelRulesPage() {
         }
       />
 
-      <section className="mb-5 rounded-2xl border border-brand-100 bg-brand-50 p-5">
+      {canAdd && <section className="mb-5 rounded-2xl border border-brand-100 bg-brand-50 p-5">
         <h3 className="font-bold text-brand-900">
           Agregar nivel por cantidad
         </h3>
@@ -202,7 +208,7 @@ export function PriceLevelRulesPage() {
             {createError}
           </p>
         )}
-      </section>
+      </section>}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-5 py-4">
@@ -289,17 +295,17 @@ export function PriceLevelRulesPage() {
                         <span className="text-xs text-slate-400">
                           No editable
                         </span>
-                      ) : isEditing ? (
+                      ) : isEditing && canChange ? (
                         <div className="inline-flex gap-2">
-                          <button
+                          {canChange && <button
                             type="button"
                             disabled={pending !== null}
                             onClick={saveEditing}
                             className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
                           >
                             <Check className="size-3.5" /> Guardar
-                          </button>
-                          <button
+                          </button>}
+                          {canDelete && <button
                             type="button"
                             disabled={pending !== null}
                             onClick={() => {
@@ -309,7 +315,7 @@ export function PriceLevelRulesPage() {
                             className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600"
                           >
                             <X className="size-3.5" /> Cancelar
-                          </button>
+                          </button>}
                         </div>
                       ) : (
                         <div className="inline-flex items-center gap-1">

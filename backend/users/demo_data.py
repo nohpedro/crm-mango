@@ -23,6 +23,7 @@ ROLE_DEFINITIONS = (
             "quotations.view_quotation",
             "quotations.add_quotation",
             "quotations.change_quotation",
+            "quotations.configure_quotation_document",
         ),
     },
     {
@@ -49,6 +50,8 @@ ROLE_DEFINITIONS = (
             "products.add_productimage",
             "products.change_productimage",
             "products.delete_productimage",
+            "quotations.configure_quotation_document",
+            "quotations.manage_quotation_templates",
         ),
     },
     {

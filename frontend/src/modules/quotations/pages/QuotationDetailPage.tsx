@@ -4,6 +4,8 @@ import { toast } from 'sonner'
 
 import logo from '../../../assets/IDESEM_sin_fondo.png'
 import { PageHeading } from '../../../components/common/PageHeading'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { quotationService } from '../services/quotation.service'
 import { useQuotation } from '../hooks/useQuotations'
@@ -11,6 +13,8 @@ import type { PaperFormat } from '../types/quotation.types'
 
 export function QuotationDetailPage() {
   const { id } = useParams()
+  const user = useAuthStore((state) => state.user)
+  const canEdit = hasPermission(user, 'quotations.change_quotation')
   const query = useQuotation(id)
   const quotation = query.data
   const getPdf = (paper: PaperFormat, print = false) =>
@@ -49,12 +53,14 @@ export function QuotationDetailPage() {
             >
               <ArrowLeft className="size-4" /> Historial
             </Link>
-            <Link
-              to={`/quotations/${id}/edit`}
-              className="inline-flex items-center gap-2 rounded-xl border border-brand-200 px-3 py-2.5 text-sm font-bold text-brand-700"
-            >
-              <Pencil className="size-4" /> Editar
-            </Link>
+            {canEdit && (
+              <Link
+                to={`/quotations/${id}/edit`}
+                className="inline-flex items-center gap-2 rounded-xl border border-brand-200 px-3 py-2.5 text-sm font-bold text-brand-700"
+              >
+                <Pencil className="size-4" /> Editar
+              </Link>
+            )}
           </div>
         }
       />

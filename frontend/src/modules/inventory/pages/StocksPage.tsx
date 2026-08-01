@@ -6,7 +6,7 @@ import { AdminTable, Pagination } from '../../admin/components/AdminTable'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { useStocks } from '../hooks/useInventory'
 import { useAuthStore } from '../../../store/authStore'
-import { hasPermission } from '../../../utils/permissions'
+import { hasAnyPermission, hasPermission } from '../../../utils/permissions'
 export function StocksPage() {
   const [search, setSearch] = useState('')
   const user = useAuthStore((state) => state.user)
@@ -20,7 +20,7 @@ export function StocksPage() {
         description="Consulta el stock físico, reservado, disponible y mínimo por almacén."
         action={
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            {hasPermission(user, 'inventory.add_stock') && (
+            {hasAnyPermission(user, ['inventory.view_stock', 'inventory.add_stock']) && (
               <>
                 <Link
                   to="/inventory/stocks/import-export"
@@ -28,12 +28,12 @@ export function StocksPage() {
                 >
                   Importar / exportar
                 </Link>
-                <Link
+                {hasPermission(user, 'inventory.add_stock') && <Link
                   to="/inventory/stocks/new"
                   className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white"
                 >
                   <Link2 className="size-4" /> Vincular producto
-                </Link>
+                </Link>}
               </>
             )}
           </div>

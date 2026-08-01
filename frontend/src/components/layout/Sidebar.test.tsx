@@ -38,4 +38,34 @@ describe('Sidebar', () => {
     expect(history.className).toContain('bg-brand-500')
     expect(quotations.className).not.toContain('bg-brand-500')
   })
+
+  it('no muestra módulos para los que el rol no tiene permiso', () => {
+    useAuthStore.setState({
+      status: 'authenticated',
+      user: {
+        ...adminUser,
+        is_admin: false,
+        permissions: ['clients.view_client'],
+      },
+    })
+    const client = new QueryClient()
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/clients']}>
+          <Sidebar
+            isOpen
+            isCollapsed={false}
+            onClose={() => undefined}
+            onToggleCollapsed={() => undefined}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Clientes' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Productos' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Usuarios' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Roles y permisos' })).not.toBeInTheDocument()
+  })
 })

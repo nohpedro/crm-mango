@@ -7,6 +7,8 @@ import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 import { PageHeading } from '../../../components/common/PageHeading'
 import { AdminTable, Pagination } from '../../admin/components/AdminTable'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
+import { useAuthStore } from '../../../store/authStore'
+import { hasPermission } from '../../../utils/permissions'
 import { useCatalogFilters } from '../hooks/useCatalogFilters'
 import {
   useCategoryMutations,
@@ -22,6 +24,10 @@ interface ReferenceListPageProps {
 export function ReferenceListPage({ kind }: ReferenceListPageProps) {
   const { filters, update } = useCatalogFilters()
   const isCategory = kind === 'category'
+  const user = useAuthStore((state) => state.user)
+  const canAdd = hasPermission(user, `products.add_${isCategory ? 'category' : 'pricelevel'}`)
+  const canChange = hasPermission(user, `products.change_${isCategory ? 'category' : 'pricelevel'}`)
+  const canViewTiers = hasPermission(user, 'products.view_pricetier')
   const categoryQuery = useCategories(filters)
   const levelQuery = usePriceLevels(filters)
   const query = isCategory ? categoryQuery : levelQuery
@@ -62,12 +68,12 @@ export function ReferenceListPage({ kind }: ReferenceListPageProps) {
             : 'Configura los niveles utilizados para calcular precios.'
         }
         action={
-          <Link
+          canAdd ? <Link
             to={`${editBase}/new`}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
           >
             <Plus className="size-4" /> Nuevo {singular}
-          </Link>
+          </Link> : null
         }
       />
       {!isCategory && (
@@ -145,14 +151,14 @@ export function ReferenceListPage({ kind }: ReferenceListPageProps) {
             </td>
             <td className="whitespace-nowrap px-5 py-4">
               <div className="flex items-center gap-3">
-                <Link
+                {canChange && <Link
                   to={`${editBase}/${row.id}/edit`}
                   className="text-xs font-bold text-brand-600 hover:text-brand-800"
                 >
                   Editar
-                </Link>
-                {!isCategory && <Link to={`/price-levels/${row.id}/rules`} className="text-xs font-bold text-brand-600 hover:text-brand-800">Niveles</Link>}
-                <button
+                </Link>}
+                {!isCategory && canViewTiers && <Link to={`/price-levels/${row.id}/rules`} className="text-xs font-bold text-brand-600 hover:text-brand-800">Niveles</Link>}
+                {canChange && <button
                   type="button"
                   disabled={mutation.isPending}
                   onClick={() =>
@@ -165,7 +171,7 @@ export function ReferenceListPage({ kind }: ReferenceListPageProps) {
                   className="text-xs font-bold text-slate-500 hover:text-slate-800 disabled:opacity-50"
                 >
                   {row.is_active ? 'Desactivar' : 'Activar'}
-                </button>
+                </button>}
               </div>
             </td>
           </tr>
