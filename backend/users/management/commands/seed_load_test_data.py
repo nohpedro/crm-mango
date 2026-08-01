@@ -390,7 +390,8 @@ class Command(BaseCommand):
                         ),
                         "status": Quotation.Status.PENDING,
                         "items": items,
-                    }
+                    },
+                    context={"allow_document_configuration": True},
                 )
                 serializer.is_valid(raise_exception=True)
                 quotation = serializer.save(created_by=actor)

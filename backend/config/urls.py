@@ -1,7 +1,8 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.generic import TemplateView
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularRedocView,
@@ -69,3 +70,15 @@ if settings.DEBUG:
         settings.MEDIA_URL,
         document_root=settings.MEDIA_ROOT,
     )
+
+
+# La compilación de React se sirve desde el mismo host que la API. Este fallback
+# permite actualizar cualquier ruta del SPA sin obtener un 404 de Django.
+if (settings.BASE_DIR.parent / "frontend" / "dist" / "index.html").exists():
+    urlpatterns += [
+        re_path(
+            r"^(?!api/|admin/|static/|media/).*$",
+            TemplateView.as_view(template_name="index.html"),
+            name="frontend",
+        ),
+    ]

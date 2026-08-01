@@ -191,6 +191,8 @@ class QuotationSerializer(serializers.ModelSerializer):
         return instance
 
     def _can_configure_document(self):
+        if self.context.get("allow_document_configuration") is True:
+            return True
         request = self.context.get("request")
         user = getattr(request, "user", None)
         if not user or not user.is_authenticated:

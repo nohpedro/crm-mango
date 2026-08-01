@@ -97,3 +97,9 @@ El frontend se encuentra en la carpeta:
 ```text
 frontend/
 ```
+
+## Instalación local sin Docker
+
+Para instalar el sistema en una computadora Windows y compartirlo mediante una
+URL estable dentro de la red local, consulta
+[`DESPLIEGUE_SIN_DOCKER.md`](DESPLIEGUE_SIN_DOCKER.md).
