@@ -52,9 +52,16 @@ function Test-CompatiblePython {
     }
     $Launcher = Get-Command py.exe -ErrorAction SilentlyContinue
     if (-not $Launcher) { return $false }
-    foreach ($Specifier in @("-3.13", "-3.12", "-3.11")) {
-        & $Launcher.Source $Specifier -c "import sys" 2>$null
-        if ($LASTEXITCODE -eq 0) { return $true }
+    foreach ($Specifier in @("-3.12", "-3.13", "-3.11")) {
+        $RuntimeAvailable = $false
+        try {
+            & $Launcher.Source $Specifier -c "import sys" 2>$null
+            $RuntimeAvailable = $LASTEXITCODE -eq 0
+        }
+        catch {
+            $RuntimeAvailable = $false
+        }
+        if ($RuntimeAvailable) { return $true }
     }
     return $false
 }
@@ -99,7 +106,7 @@ if (-not (Test-CompatibleNode)) {
     Install-Prerequisite "OpenJS.NodeJS.LTS" "Node.js LTS"
 }
 if (-not (Test-CompatiblePython)) {
-    throw "Python se instalo, pero Windows aun no lo reconoce. Reinicia el equipo y ejecuta nuevamente este boton."
+    throw "Python se instalo, pero Windows aun no lo reconoce. Reinicia el equipo y vuelve a ejecutar 'Configurar CRM IDESEM.bat'."
 }
 if (-not (Test-CompatibleNode)) {
     throw "Node.js se instalo, pero Windows aun no lo reconoce. Reinicia el equipo y ejecuta nuevamente este boton."

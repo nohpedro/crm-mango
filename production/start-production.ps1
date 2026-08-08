@@ -16,6 +16,7 @@ $Requirements = Join-Path $Backend "requirements.txt"
 $RequirementsMarker = Join-Path $Runtime "requirements.sha256"
 $NodeMarker = Join-Path $Runtime "package-lock.sha256"
 $SecretFile = Join-Path $Runtime "secret-key.txt"
+$ConfiguredMarker = Join-Path $Runtime "configured.ok"
 $ConfigFile = Join-Path $PSScriptRoot "config.psd1"
 
 if (-not (Test-Path -LiteralPath $ConfigFile)) {
@@ -89,9 +90,16 @@ if (-not $VenvUsable) {
     $PyLauncher = Get-Command py.exe -ErrorAction SilentlyContinue
     $EnvironmentCreated = $false
     if ($PyLauncher) {
-        foreach ($Specifier in @("-3.13", "-3.12", "-3.11")) {
-            & $PyLauncher.Source $Specifier -c "import sys" 2>$null
-            if ($LASTEXITCODE -eq 0) {
+        foreach ($Specifier in @("-3.12", "-3.13", "-3.11")) {
+            $RuntimeAvailable = $false
+            try {
+                & $PyLauncher.Source $Specifier -c "import sys" 2>$null
+                $RuntimeAvailable = $LASTEXITCODE -eq 0
+            }
+            catch {
+                $RuntimeAvailable = $false
+            }
+            if ($RuntimeAvailable) {
                 & $PyLauncher.Source $Specifier -m venv $VenvRoot
                 $EnvironmentCreated = $LASTEXITCODE -eq 0
                 break
@@ -230,6 +238,7 @@ try {
     }
 
     if ($PrepareOnly) {
+        Set-Content -LiteralPath $ConfiguredMarker -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss") -Encoding ASCII
         Write-Host "`nConfiguracion terminada correctamente." -ForegroundColor Green
         Write-Host "URL estable para la red local: $NetworkUrl" -ForegroundColor Yellow
         return
