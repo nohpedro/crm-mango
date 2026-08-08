@@ -13,4 +13,13 @@ export interface ImportResult {
   created: number
   rejected: number
   errors: ImportErrorRow[]
+  created_client_types?: string[]
+  created_price_levels?: string[]
+  created_categories?: string[]
+}
+
+export interface ImportOptions {
+  createMissingClientTypes?: boolean
+  createMissingPriceLevels?: boolean
+  createMissingCategories?: boolean
 }

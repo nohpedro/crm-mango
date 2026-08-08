@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from clients.models import Client
 from products.models import Product
@@ -68,6 +69,7 @@ class Quotation(models.Model):
     valid_days = models.PositiveSmallIntegerField(default=7, validators=[MinValueValidator(1)])
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    quotation_date = models.DateField(default=timezone.localdate)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="quotations_created"
     )
@@ -75,8 +77,12 @@ class Quotation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-created_at"]
-        indexes = [models.Index(fields=["number"]), models.Index(fields=["status", "created_at"])]
+        ordering = ["-quotation_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["number"]),
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["status", "quotation_date"]),
+        ]
         permissions = [
             (
                 "configure_quotation_document",
@@ -85,6 +91,14 @@ class Quotation(models.Model):
             (
                 "manage_quotation_templates",
                 "Puede administrar las plantillas de cotización",
+            ),
+            (
+                "change_quotation_status",
+                "Puede cambiar el estado de una cotización",
+            ),
+            (
+                "view_dashboard",
+                "Puede ver el panel principal y sus reportes",
             ),
         ]
 

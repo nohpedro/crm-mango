@@ -37,7 +37,7 @@ Se pueden indicar otras URLs o credenciales:
 .\qa\playwright\run-full-system.cmd `
   -FrontendUrl "http://localhost:5173" `
   -ApiUrl "http://localhost:8000/api/v1" `
-  -Username "demo_admin" `
+  -Username "superadmin" `
   -Password "Demo12345!"
 ```
 

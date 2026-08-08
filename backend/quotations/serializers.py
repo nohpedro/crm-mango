@@ -121,12 +121,19 @@ class QuotationSerializer(serializers.ModelSerializer):
     total_savings = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     template_name = serializers.CharField(source="template.name", read_only=True)
+    quotation_date = serializers.DateField(
+        required=False,
+        error_messages={
+            "invalid": "Ingresa una fecha válida con el formato AAAA-MM-DD.",
+            "null": "Selecciona la fecha de la cotización.",
+        },
+    )
 
     class Meta:
         model = Quotation
         fields = [
             "id", "number", "client", "client_name", "client_tax_id", "client_phone", "client_address",
-            "template", "template_name", "valid_days", "notes", "status", "items", "total", "total_savings", "created_by", "created_by_name",
+            "template", "template_name", "valid_days", "notes", "status", "quotation_date", "items", "total", "total_savings", "created_by", "created_by_name",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "number", "template_name", "total", "total_savings", "created_by", "created_by_name", "created_at", "updated_at"]

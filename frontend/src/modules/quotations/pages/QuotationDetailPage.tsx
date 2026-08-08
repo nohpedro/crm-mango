@@ -117,6 +117,9 @@ export function QuotationDetailPage() {
             </p>
           </div>
           <div className="text-left sm:text-right">
+            <p className="text-sm font-semibold text-slate-700">
+              Fecha: {formatQuotationDate(quotation.quotation_date)}
+            </p>
             <p className="text-sm text-slate-600">
               Tel. {quotation.client_phone || 'No registrado'}
             </p>
@@ -165,4 +168,8 @@ export function QuotationDetailPage() {
       </article>
     </>
   )
+}
+
+function formatQuotationDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString('es-BO')
 }

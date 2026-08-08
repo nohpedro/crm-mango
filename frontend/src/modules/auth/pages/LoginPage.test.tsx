@@ -17,7 +17,7 @@ function renderLogin() {
       <MemoryRouter initialEntries={['/login']}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/dashboard" element={<p>Panel autenticado</p>} />
+          <Route path="/" element={<p>Panel autenticado</p>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

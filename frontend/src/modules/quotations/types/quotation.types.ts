@@ -110,6 +110,7 @@ export interface Quotation {
   valid_days: number
   notes: string
   status: QuotationStatus
+  quotation_date: string
   items: QuotationItem[]
   total: string
   created_by: string | null
@@ -128,6 +129,7 @@ export interface QuotationWriteRequest {
   valid_days?: number
   notes: string
   status: QuotationStatus
+  quotation_date: string
   items: Array<{ product: string; quantity: number }>
 }
 

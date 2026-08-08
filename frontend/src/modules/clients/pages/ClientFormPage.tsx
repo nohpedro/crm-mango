@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { PageHeading } from '../../../components/common/PageHeading'
@@ -30,7 +30,9 @@ const empty: ClientFormValues = {
 
 export function ClientFormPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { id } = useParams()
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? '/clients'
   const editing = Boolean(id)
   const user = useAuthStore((state) => state.user)
   const canAddClientType = hasPermission(user, 'clients.add_clienttype')
@@ -86,7 +88,7 @@ export function ClientFormPage() {
     void (editing ? clientService.update(id ?? '', values) : clientService.create(values))
       .then(() => {
         toast.success(editing ? 'Cliente actualizado.' : 'Cliente creado.')
-        navigate('/clients')
+        navigate(returnTo)
       })
       .catch((error: unknown) =>
         toast.error(getAdminErrorMessage(error, 'No se pudo crear el cliente.')),
@@ -184,7 +186,7 @@ export function ClientFormPage() {
         <div className="mt-7">
           <AdminFormActions
             pending={isSubmitting}
-            cancelTo="/clients"
+            cancelTo={returnTo}
             label={editing ? 'Guardar cambios' : 'Crear cliente'}
           />
         </div>

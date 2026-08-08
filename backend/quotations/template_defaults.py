@@ -249,8 +249,11 @@ def arranged_template_sections(sections, columns):
         item["grid_column"] = min(max(1, item.get("grid_column", 1)), columns)
         item["column_span"] = min(max(1, item.get("column_span", 1)), columns - item["grid_column"] + 1)
         item["grid_row"] = max(1, item.get("grid_row", 1))
-        while item.get("visible", True) and any(
+        # El encabezado se dibuja fuera de la cuadrícula. Su sección "company"
+        # conserva textos y visibilidad, pero nunca debe desplazar las cajas.
+        while item.get("visible", True) and item.get("key") != "company" and any(
             other.get("visible", True)
+            and other.get("key") != "company"
             and item["grid_row"] < other["grid_row"] + other.get("row_span", 7)
             and item["grid_row"] + item.get("row_span", 7) > other["grid_row"]
             and item["grid_column"] <= other["grid_column"] + other.get("column_span", 1) - 1

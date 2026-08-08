@@ -1,6 +1,5 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { Edit, Search, UsersRound, Plus } from 'lucide-react'
-import { useState } from 'react'
 
 import { PageHeading } from '../../../components/common/PageHeading'
 import { AdminTable, Pagination } from '../../admin/components/AdminTable'
@@ -10,9 +9,12 @@ import { useAuthStore } from '../../../store/authStore'
 import { hasAnyPermission, hasPermission } from '../../../utils/permissions'
 
 export function ClientsPage() {
-  const [search, setSearch] = useState('')
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const search = searchParams.get('search') ?? ''
   const user = useAuthStore((state) => state.user)
-  const [page, setPage] = useState(1)
+  const page = Math.max(1, Number(searchParams.get('page')) || 1)
+  const returnTo = `${location.pathname}${location.search}`
   const params = { search, page, ordering: 'name' }
   const query = useClients(params)
   const clients = query.data?.results ?? []
@@ -26,6 +28,7 @@ export function ClientsPage() {
             {hasPermission(user, 'clients.add_client') && (
               <Link
                 to="/clients/new"
+                state={{ returnTo }}
                 className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
               >
                 <Plus className="size-4" /> Nuevo cliente
@@ -58,8 +61,11 @@ export function ClientsPage() {
           <input
             value={search}
             onChange={(event) => {
-              setSearch(event.target.value)
-              setPage(1)
+              const next = new URLSearchParams(searchParams)
+              if (event.target.value) next.set('search', event.target.value)
+              else next.delete('search')
+              next.delete('page')
+              setSearchParams(next, { replace: true })
             }}
             placeholder="Buscar por nombre, NIT/CI, ciudad o WhatsApp…"
             className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
@@ -108,6 +114,7 @@ export function ClientsPage() {
               {hasPermission(user, 'clients.change_client') && (
                 <Link
                   to={`/clients/${client.id}/edit`}
+                  state={{ returnTo }}
                   className="inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-900"
                 >
                   <Edit className="size-4" /> Editar
@@ -118,7 +125,16 @@ export function ClientsPage() {
         ))}
       </AdminTable>
       {query.data && (
-        <Pagination page={page} count={query.data.count} onPageChange={setPage} />
+        <Pagination
+          page={page}
+          count={query.data.count}
+          onPageChange={(nextPage) => {
+            const next = new URLSearchParams(searchParams)
+            if (nextPage > 1) next.set('page', String(nextPage))
+            else next.delete('page')
+            setSearchParams(next)
+          }}
+        />
       )}
     </>
   )

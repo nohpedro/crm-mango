@@ -1,7 +1,7 @@
 from django.core.files.uploadedfile import SimpleUploadedFile
 from io import BytesIO
 from django.test import TestCase
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from rest_framework import serializers
 from rest_framework.test import APITestCase
 from rest_framework import status
@@ -242,9 +242,9 @@ class ProductRestoreAPITests(APITestCase):
         category = Category.objects.create(name="General", code="GEN")
         workbook = Workbook()
         sheet = workbook.active
-        sheet.append(["SKU", "Nombre", "Categoría", "Código de barras", "Descripción", "Activo"])
-        sheet.append(["SKU-001", "Producto uno", "GEN", "", "", "SI"])
-        sheet.append(["SKU-001", "Producto dos", "GEN", "", "", "SI"])
+        sheet.append(["SKU", "Nombre", "Categoría", "Código de barras", "Descripción", "Precio de venta normal (nivel x1) (Bs)", "Activo", "Almacén", "Cantidad"])
+        sheet.append(["SKU-001", "Producto uno", "GEN", "", "", "100.00", "SI", "", ""])
+        sheet.append(["SKU-001", "Producto dos", "GEN", "", "", "150.50", "SI", "", ""])
         output = BytesIO()
         workbook.save(output)
         upload = SimpleUploadedFile("productos.xlsx", output.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -254,3 +254,125 @@ class ProductRestoreAPITests(APITestCase):
         self.assertEqual(response.data["created"], 1)
         self.assertEqual(response.data["rejected"], 1)
         self.assertEqual(Product.objects.filter(category=category).count(), 1)
+
+
+class ProductTransferTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            username="product-transfer-admin",
+            email="product-transfer-admin@example.com",
+            password="Password123!",
+        )
+        self.client.force_authenticate(self.admin)
+
+    def test_import_creates_many_missing_categories_without_leaving_flow(self):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append([
+            "SKU",
+            "Nombre",
+            "Categoría",
+            "Código de barras",
+            "Descripción",
+            "Precio de venta normal (nivel x1) (Bs)",
+            "Activo",
+            "Almacén",
+            "Cantidad",
+        ])
+        sheet.append(["AUTO-001", "Producto uno", "Calefacción", "", "", "100.00", "SI", "", ""])
+        sheet.append(["AUTO-002", "Producto dos", "Herramientas", "", "", "250.50", "SI", "", ""])
+        sheet.append(["AUTO-003", "Producto tres", "Calefacción", "", "", "75", "SI", "", ""])
+        output = BytesIO()
+        workbook.save(output)
+        upload = SimpleUploadedFile(
+            "productos.xlsx",
+            output.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        response = self.client.post(
+            "/api/v1/catalog/import/",
+            {
+                "file": upload,
+                "mode": "partial",
+                "create_missing_categories": "true",
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["created"], 3)
+        self.assertEqual(response.data["rejected"], 0)
+        self.assertCountEqual(
+            response.data["created_categories"], ["Calefacción", "Herramientas"]
+        )
+        self.assertEqual(Category.objects.count(), 2)
+        self.assertEqual(Product.objects.count(), 3)
+        self.assertEqual(
+            str(Product.objects.get(sku="AUTO-002").normal_unit_price),
+            "250.50",
+        )
+
+    def test_template_and_export_include_normal_sale_price(self):
+        category = Category.objects.create(name="General", code="GENERAL")
+        Product.objects.create(
+            category=category,
+            name="Producto con precio",
+            sku="PRICE-001",
+            normal_unit_price="123.45",
+        )
+
+        template_response = self.client.get("/api/v1/catalog/template/")
+        export_response = self.client.get("/api/v1/catalog/export/")
+
+        self.assertEqual(template_response.status_code, status.HTTP_200_OK)
+        template = load_workbook(BytesIO(template_response.content), read_only=True)
+        template_headers = [cell.value for cell in next(template.active.iter_rows())]
+        self.assertIn("Precio de venta normal (nivel x1) (Bs)", template_headers)
+
+        self.assertEqual(export_response.status_code, status.HTTP_200_OK)
+        exported = load_workbook(BytesIO(export_response.content), read_only=True)
+        rows = list(exported.active.iter_rows(values_only=True))
+        price_index = rows[0].index("Precio de venta normal (nivel x1) (Bs)")
+        self.assertEqual(rows[1][price_index], 123.45)
+
+    def test_import_rejects_empty_or_invalid_normal_sale_price(self):
+        category = Category.objects.create(name="General", code="GENERAL")
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append([
+            "SKU",
+            "Nombre",
+            "Categoría",
+            "Código de barras",
+            "Descripción",
+            "Precio de venta normal (nivel x1) (Bs)",
+            "Activo",
+            "Almacén",
+            "Cantidad",
+        ])
+        sheet.append(["NO-PRICE", "Sin precio", category.code, "", "", "", "SI", "", ""])
+        sheet.append(["BAD-PRICE", "Precio inválido", category.code, "", "", "abc", "SI", "", ""])
+        output = BytesIO()
+        workbook.save(output)
+        upload = SimpleUploadedFile(
+            "productos.xlsx",
+            output.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        response = self.client.post(
+            "/api/v1/catalog/import/",
+            {"file": upload, "mode": "partial"},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["created"], 0)
+        self.assertEqual(response.data["rejected"], 2)
+        self.assertTrue(
+            all(
+                error["columna"] == "Precio de venta normal (nivel x1) (Bs)"
+                for error in response.data["errors"]
+            )
+        )

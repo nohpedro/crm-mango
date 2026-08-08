@@ -23,7 +23,14 @@ export interface NavigationGroup {
 export const navigationGroups: NavigationGroup[] = [
   {
     label: 'Inicio',
-    items: [{ label: 'Panel principal', path: '/dashboard', icon: ChartNoAxesCombined }],
+    items: [
+      {
+        label: 'Panel principal',
+        path: '/dashboard',
+        icon: ChartNoAxesCombined,
+        requiredAnyPermissions: ['quotations.view_dashboard'],
+      },
+    ],
   },
   {
     label: 'Operación diaria',

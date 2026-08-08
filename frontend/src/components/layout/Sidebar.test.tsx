@@ -64,8 +64,37 @@ describe('Sidebar', () => {
     )
 
     expect(screen.getByRole('link', { name: 'Clientes' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Panel principal' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Productos' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Usuarios' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Roles y permisos' })).not.toBeInTheDocument()
+  })
+
+  it('muestra el panel principal únicamente con su permiso específico', () => {
+    useAuthStore.setState({
+      status: 'authenticated',
+      user: {
+        ...adminUser,
+        is_admin: false,
+        permissions: ['quotations.view_dashboard'],
+      },
+    })
+    const client = new QueryClient()
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Sidebar
+            isOpen
+            isCollapsed={false}
+            onClose={() => undefined}
+            onToggleCollapsed={() => undefined}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Panel principal' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Historial de cotizaciones' })).not.toBeInTheDocument()
   })
 })

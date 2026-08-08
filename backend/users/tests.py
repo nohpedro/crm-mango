@@ -70,6 +70,8 @@ class AuthenticationAPITests(APITestCase):
         }
         self.assertIn("configure_quotation_document", quotation_permissions)
         self.assertIn("manage_quotation_templates", quotation_permissions)
+        self.assertIn("change_quotation_status", quotation_permissions)
+        self.assertIn("view_dashboard", quotation_permissions)
 
     def test_login_rejects_invalid_credentials(self):
         response = self.client.post(
@@ -163,6 +165,26 @@ class RolePermissionAPITests(APITestCase):
         self.assertEqual(allowed.status_code, status.HTTP_200_OK)
         self.assertEqual(rejected.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_dependent_permission_is_not_effective_without_parent_access(self):
+        self.user.role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="products",
+                codename="view_category",
+            )
+        )
+        blocked = self.client.get("/api/v1/catalog/categories/")
+
+        self.user.role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="products",
+                codename="view_product",
+            )
+        )
+        allowed = self.client.get("/api/v1/catalog/categories/")
+
+        self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK)
+
     def test_user_and_role_screens_use_assigned_permissions(self):
         users_denied = self.client.get("/api/v1/users/")
         roles_denied = self.client.get("/api/v1/roles/")
@@ -191,22 +213,97 @@ class RolePermissionAPITests(APITestCase):
             Permission.objects.get(
                 content_type__app_label="users",
                 codename="change_role",
-            )
+            ),
+            Permission.objects.get(
+                content_type__app_label="users",
+                codename="view_role",
+            ),
         )
         allowed = self.client.get("/api/v1/permissions/")
         self.assertEqual(allowed.status_code, status.HTTP_200_OK)
 
+    def test_role_rejects_permissions_without_required_view_access(self):
+        admin_role = Role.objects.create(name="Administrador QA", code="ADMIN")
+        admin = User.objects.create_user(
+            username="admin-permissions",
+            email="admin-permissions@example.com",
+            password="Password123!",
+            role=admin_role,
+        )
+        self.client.force_authenticate(admin)
+        delete_product = Permission.objects.get(
+            content_type__app_label="products",
+            codename="delete_product",
+        )
+        view_product = Permission.objects.get(
+            content_type__app_label="products",
+            codename="view_product",
+        )
+        view_category = Permission.objects.get(
+            content_type__app_label="products",
+            codename="view_category",
+        )
+
+        without_view = self.client.post(
+            "/api/v1/roles/",
+            {
+                "name": "Elimina productos",
+                "code": "DELETE_PRODUCTS",
+                "permissions": [delete_product.id],
+            },
+            format="json",
+        )
+        category_without_products = self.client.post(
+            "/api/v1/roles/",
+            {
+                "name": "Consulta categorías",
+                "code": "VIEW_CATEGORIES",
+                "permissions": [view_category.id],
+            },
+            format="json",
+        )
+        valid = self.client.post(
+            "/api/v1/roles/",
+            {
+                "name": "Catálogo válido",
+                "code": "VALID_CATALOG",
+                "permissions": [view_product.id, delete_product.id],
+            },
+            format="json",
+        )
+
+        self.assertEqual(without_view.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Ver Productos", str(without_view.data["permissions"]))
+        self.assertEqual(category_without_products.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Ver Productos", str(category_without_products.data["permissions"]))
+        self.assertEqual(valid.status_code, status.HTTP_201_CREATED)
+
 
 class DemoUserSeedCommandTests(APITestCase):
-    def test_command_creates_demo_roles_and_users_without_duplicates(self):
+    def test_command_creates_four_primary_users_without_duplicates(self):
+        User.objects.create_user(
+            username="demo_admin",
+            email="admin.demo@idesem.local",
+            password="OldPassword123!",
+        )
+        User.objects.create_user(
+            username="admin",
+            email="admin@seed.idesem.local",
+            password="OldPassword123!",
+        )
         call_command("seed_demo_users")
 
-        self.assertEqual(Role.objects.filter(code__in=["ADMIN", "SALES", "CATALOG", "INVENTORY", "VIEWER"]).count(), 5)
-        commercial = User.objects.get(username="demo_comercial")
-        self.assertEqual(commercial.role.code, "SALES")
-        self.assertTrue(commercial.check_password("Demo12345!"))
+        self.assertEqual(
+            Role.objects.filter(
+                code__in=["ADMIN", "C001", "CONF001", "CJ001"]
+            ).count(),
+            4,
+        )
+        cashier = User.objects.get(username="cajero")
+        self.assertEqual(cashier.role.code, "C001")
+        self.assertTrue(cashier.check_password("Demo12345!"))
         self.assertTrue(
-            commercial.role.permissions.filter(
+            cashier.role.permissions.filter(
                 content_type__app_label="quotations",
                 codename="add_quotation",
             ).exists()
@@ -215,15 +312,24 @@ class DemoUserSeedCommandTests(APITestCase):
             QuotationTemplate.objects.filter(name="Cotización profesional IDESEM").exists()
         )
         expected_system_roles = {
-            "admin": "ADMIN",
-            "cajero": "SALES",
-            "inventarios": "INVENTORY",
-            "configuraciones": "CATALOG",
+            "cajero": "C001",
+            "jefe": "CJ001",
+            "configuraciones": "CONF001",
+            "superadmin": "ADMIN",
         }
         for username, role_code in expected_system_roles.items():
             seeded = User.objects.get(username=username)
             self.assertEqual(seeded.role.code, role_code)
             self.assertTrue(seeded.check_password("Demo12345!"))
+        superadmin = User.objects.get(username="superadmin")
+        self.assertTrue(superadmin.is_superuser)
+        self.assertTrue(superadmin.is_staff)
+        self.assertTrue(
+            User.objects.get(username="jefe").role.permissions.filter(
+                content_type__app_label="inventory",
+                codename="change_stock",
+            ).exists()
+        )
         self.assertEqual(
             PriceLevel.objects.filter(
                 name__in=["Mayorista", "Minorista", "Preferencial"]
@@ -235,13 +341,14 @@ class DemoUserSeedCommandTests(APITestCase):
             1,
         )
 
-        commercial.set_password("AnotherPassword123!")
-        commercial.save()
+        cashier.set_password("AnotherPassword123!")
+        cashier.save()
         call_command("seed_system_data")
 
-        commercial.refresh_from_db()
-        self.assertTrue(commercial.check_password("AnotherPassword123!"))
-        self.assertEqual(User.objects.filter(username__startswith="demo_").count(), 5)
+        cashier.refresh_from_db()
+        self.assertTrue(cashier.check_password("AnotherPassword123!"))
+        self.assertEqual(User.objects.filter(username__startswith="demo_").count(), 0)
+        self.assertFalse(User.objects.filter(username="admin").exists())
         self.assertEqual(
             User.objects.filter(username__in=expected_system_roles).count(),
             4,

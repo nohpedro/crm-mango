@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Sum
-from django.db.models.functions import TruncDate
 from django.utils import timezone
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
@@ -80,8 +79,8 @@ def _quotations_between(start, end, quotation_status="all"):
     if quotation_status not in STATUS_LABELS:
         raise ValueError("El estado debe ser all, pending o paid.")
     queryset = Quotation.objects.filter(
-        created_at__gte=start,
-        created_at__lt=end,
+        quotation_date__gte=start.date(),
+        quotation_date__lt=end.date(),
     )
     if quotation_status != "all":
         queryset = queryset.filter(status=quotation_status)
@@ -134,16 +133,13 @@ def dashboard_data(
     }
 
     grouped_days = {
-        item["day"]: item
-        for item in quotations.annotate(
-            day=TruncDate("created_at", tzinfo=REPORT_TIMEZONE)
-        )
-        .values("day")
+        item["quotation_date"]: item
+        for item in quotations.values("quotation_date")
         .annotate(
             count=Count("id", distinct=True),
             total=Sum(_money_expression()),
         )
-        .order_by("day")
+        .order_by("quotation_date")
     }
     day = start.date()
     series = []
@@ -230,7 +226,7 @@ def report_csv(
             quotation__in=quotations,
         )
         .select_related("quotation", "product")
-        .order_by("quotation__created_at", "quotation__number", "id")
+        .order_by("quotation__quotation_date", "quotation__number", "id")
     )
     output = StringIO()
     writer = csv.writer(output, delimiter=";")
@@ -251,10 +247,9 @@ def report_csv(
         ]
     )
     for item in rows:
-        created = item.quotation.created_at.astimezone(REPORT_TIMEZONE)
         writer.writerow(
             [
-                created.strftime("%d/%m/%Y %H:%M"),
+                item.quotation.quotation_date.strftime("%d/%m/%Y"),
                 item.quotation.number,
                 item.quotation.client_name,
                 item.quotation.client_tax_id,

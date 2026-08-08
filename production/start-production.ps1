@@ -10,7 +10,8 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Backend = Join-Path $Root "backend"
 $Frontend = Join-Path $Root "frontend"
 $Runtime = Join-Path $PSScriptRoot "runtime"
-$Python = Join-Path $Backend ".venv\Scripts\python.exe"
+$VenvRoot = Join-Path $Backend ".venv"
+$Python = Join-Path $VenvRoot "Scripts\python.exe"
 $Requirements = Join-Path $Backend "requirements.txt"
 $RequirementsMarker = Join-Path $Runtime "requirements.sha256"
 $NodeMarker = Join-Path $Runtime "package-lock.sha256"
@@ -18,7 +19,7 @@ $SecretFile = Join-Path $Runtime "secret-key.txt"
 $ConfigFile = Join-Path $PSScriptRoot "config.psd1"
 
 if (-not (Test-Path -LiteralPath $ConfigFile)) {
-    throw "No se encontró el archivo de configuración: $ConfigFile"
+    throw "No se encontro el archivo de configuracion: $ConfigFile"
 }
 
 $Configuration = Import-PowerShellDataFile -LiteralPath $ConfigFile
@@ -64,23 +65,62 @@ function Get-LanAddresses {
 }
 
 New-Item -ItemType Directory -Force -Path $Runtime | Out-Null
+$env:PYTHONUTF8 = "1"
 
-if (-not (Test-Path -LiteralPath $Python)) {
+$VenvUsable = $false
+if (Test-Path -LiteralPath $Python) {
+    try {
+        $ExistingVenvVersion = [version](& $Python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+        $VenvUsable = $ExistingVenvVersion -ge [version]"3.11"
+    }
+    catch { $VenvUsable = $false }
+}
+
+if (-not $VenvUsable) {
+    if (Test-Path -LiteralPath $VenvRoot) {
+        $ResolvedVenv = [IO.Path]::GetFullPath($VenvRoot)
+        $ResolvedBackend = [IO.Path]::GetFullPath($Backend) + [IO.Path]::DirectorySeparatorChar
+        if (-not $ResolvedVenv.StartsWith($ResolvedBackend, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "La ruta del entorno de Python no pertenece a la carpeta backend."
+        }
+        Remove-Item -LiteralPath $ResolvedVenv -Recurse -Force
+    }
     Write-Step "Creando el entorno de Python"
     $PyLauncher = Get-Command py.exe -ErrorAction SilentlyContinue
+    $EnvironmentCreated = $false
     if ($PyLauncher) {
-        & $PyLauncher.Source -3 -m venv (Join-Path $Backend ".venv")
+        foreach ($Specifier in @("-3.13", "-3.12", "-3.11")) {
+            & $PyLauncher.Source $Specifier -c "import sys" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                & $PyLauncher.Source $Specifier -m venv $VenvRoot
+                $EnvironmentCreated = $LASTEXITCODE -eq 0
+                break
+            }
+        }
     }
-    else {
+    if (-not $EnvironmentCreated) {
         $SystemPython = Get-Command python.exe -ErrorAction SilentlyContinue
         if (-not $SystemPython) {
-            throw "No se encontró Python. Instala Python 3.12 o superior y vuelve a ejecutar este archivo."
+            throw "No se encontro Python 3.11 o superior. Ejecuta primero 'Configurar CRM IDESEM.bat'."
         }
-        & $SystemPython.Source -m venv (Join-Path $Backend ".venv")
+        $SystemVersion = [version](& $SystemPython.Source -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+        if ($SystemVersion -lt [version]"3.11") {
+            throw "La version de Python es $SystemVersion. Ejecuta primero 'Configurar CRM IDESEM.bat'."
+        }
+        & $SystemPython.Source -m venv $VenvRoot
+        $EnvironmentCreated = $LASTEXITCODE -eq 0
+    }
+    if (-not $EnvironmentCreated -or -not (Test-Path -LiteralPath $Python)) {
+        throw "No se pudo crear el entorno de Python. Ejecuta nuevamente el configurador."
     }
 }
 
-if (-not (Test-HashMarker $Requirements $RequirementsMarker)) {
+$VenvVersion = [version](& $Python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+if ($VenvVersion -lt [version]"3.11") {
+    throw "El entorno del CRM usa Python $VenvVersion. Borra backend\.venv y ejecuta el configurador para actualizarlo."
+}
+
+if ($Rebuild -or -not (Test-HashMarker $Requirements $RequirementsMarker)) {
     Write-Step "Instalando dependencias del servidor"
     & $Python -m pip install --upgrade pip
     & $Python -m pip install -r $Requirements
@@ -90,11 +130,17 @@ if (-not (Test-HashMarker $Requirements $RequirementsMarker)) {
 
 $Npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
 if (-not $Npm) {
-    throw "No se encontró Node.js. Instala Node.js 22 LTS o superior y vuelve a ejecutar este archivo."
+    throw "No se encontro Node.js. Ejecuta primero 'Configurar CRM IDESEM.bat'."
+}
+$Node = Get-Command node.exe -ErrorAction SilentlyContinue
+$NodeVersion = [version]((& $Node.Source --version).Trim().TrimStart("v"))
+if (-not (($NodeVersion.Major -eq 20 -and $NodeVersion.Minor -ge 19) -or $NodeVersion.Major -ge 22)) {
+    throw "Node.js $NodeVersion no es compatible. Ejecuta nuevamente 'Configurar CRM IDESEM.bat'."
 }
 
 $PackageLock = Join-Path $Frontend "package-lock.json"
-if (-not (Test-Path -LiteralPath (Join-Path $Frontend "node_modules")) -or
+if ($Rebuild -or
+    -not (Test-Path -LiteralPath (Join-Path $Frontend "node_modules")) -or
     -not (Test-HashMarker $PackageLock $NodeMarker)) {
     Write-Step "Instalando dependencias de la interfaz"
     Push-Location $Frontend
@@ -112,12 +158,17 @@ $LatestFrontendChange = Get-ChildItem -Path (Join-Path $Frontend "src"), (Join-P
     Sort-Object LastWriteTimeUtc -Descending |
     Select-Object -First 1
 $NeedsBuild = $Rebuild -or -not (Test-Path -LiteralPath $DistIndex)
+if (-not $NeedsBuild) {
+    # Una compilacion de desarrollo usa /assets y apunta la API a localhost.
+    # La version para red local siempre debe usar /static y una API relativa.
+    $NeedsBuild = (Get-Content -Raw -LiteralPath $DistIndex) -notmatch '/static/'
+}
 if (-not $NeedsBuild -and $LatestFrontendChange) {
     $NeedsBuild = $LatestFrontendChange.LastWriteTimeUtc -gt (Get-Item $DistIndex).LastWriteTimeUtc
 }
 
 if ($NeedsBuild) {
-    Write-Step "Compilando la interfaz para la URL única del CRM"
+    Write-Step "Compilando la interfaz para la URL unica del CRM"
     $env:VITE_API_URL = "/api/v1"
     Push-Location $Frontend
     try {
@@ -156,17 +207,17 @@ $env:DJANGO_ALLOWED_HOSTS = ($Hosts | Select-Object -Unique) -join ","
 $env:CORS_ALLOWED_ORIGINS = ($Origins | Select-Object -Unique) -join ","
 $env:CSRF_TRUSTED_ORIGINS = $env:CORS_ALLOWED_ORIGINS
 
-Write-Step "Preparando la base de datos y los archivos estáticos"
+Write-Step "Preparando la base de datos y los archivos estaticos"
 Push-Location $Backend
 try {
     & $Python manage.py migrate --noinput
     if ($LASTEXITCODE -ne 0) { throw "No se pudieron aplicar las migraciones." }
-    & $Python manage.py collectstatic --noinput --clear
-    if ($LASTEXITCODE -ne 0) { throw "No se pudieron preparar los archivos estáticos." }
+    & $Python manage.py collectstatic --noinput --verbosity 0
+    if ($LASTEXITCODE -ne 0) { throw "No se pudieron preparar los archivos estaticos." }
     & $Python manage.py seed_system_data
     if ($LASTEXITCODE -ne 0) { throw "No se pudieron verificar los datos iniciales." }
     & $Python manage.py check
-    if ($LASTEXITCODE -ne 0) { throw "La configuración de Django contiene errores." }
+    if ($LASTEXITCODE -ne 0) { throw "La configuracion de Django contiene errores." }
 
     $NetworkUrl = "http://$ConfiguredHostName`:$Port"
     Set-Content -LiteralPath (Join-Path $Runtime "url-red-local.txt") -Value $NetworkUrl -Encoding UTF8
@@ -179,11 +230,19 @@ try {
     }
 
     if ($PrepareOnly) {
-        Write-Host "`nConfiguración terminada correctamente." -ForegroundColor Green
+        Write-Host "`nConfiguracion terminada correctamente." -ForegroundColor Green
         Write-Host "URL estable para la red local: $NetworkUrl" -ForegroundColor Yellow
         return
     }
 
+    $ExistingListener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($ExistingListener) {
+        throw (
+            "El puerto $Port ya esta siendo utilizado por otro programa (PID $($ExistingListener.OwningProcess)). " +
+            "Cierra el otro programa o cambia Port en production\config.psd1."
+        )
+    }
     Write-Host "`nFrontend y backend de CRM IDESEM iniciados." -ForegroundColor Green
     Write-Host "En esta computadora: http://localhost:$Port" -ForegroundColor White
     Write-Host "En la red local:     $NetworkUrl" -ForegroundColor Yellow

@@ -4,5 +4,5 @@ import { useAuthStore } from '../store/authStore'
 
 export function PublicOnlyRoute() {
   const status = useAuthStore((state) => state.status)
-  return status === 'authenticated' ? <Navigate to="/dashboard" replace /> : <Outlet />
+  return status === 'authenticated' ? <Navigate to="/" replace /> : <Outlet />
 }

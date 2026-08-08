@@ -197,7 +197,7 @@ def standard_header(quotation, styles, width, layout, image_paths, sections):
     title = paragraph(
         f"<b><font size='{document_title_size}'>{escape(document_title)}</font></b>"
         f"<br/><font size=8>{quotation.number}</font>"
-        f"<br/><font size=7>{quotation.created_at.strftime('%d/%m/%Y')}</font>",
+        f"<br/><font size=7>{quotation.quotation_date.strftime('%d/%m/%Y')}</font>",
         styles["right"],
     )
     table = Table(
@@ -256,7 +256,7 @@ def roll_header(quotation, styles, width, selected_image_path=None):
         [
             paragraph("<b>COTIZACIÓN</b>", centered),
             paragraph(quotation.number, centered),
-            paragraph(quotation.created_at.strftime("%d/%m/%Y"), centered_small),
+            paragraph(quotation.quotation_date.strftime("%d/%m/%Y"), centered_small),
         ]
     )
     table = Table([[content]], colWidths=[width], hAlign="CENTER")
@@ -525,7 +525,7 @@ def standard_pages(
     ]
     def planned_height(page_sections, item_rows, include_header=False):
         story = []
-        if include_header:
+        if include_header and layout.get("_header_visible", True):
             story.extend(
                 [
                     standard_header(
@@ -730,6 +730,52 @@ def positioned_grid_story(
     return story
 
 
+def compact_vertical_gaps(sections, rows_to_recover):
+    """Reduce solo espacios vacios, conservando tamanos y orden de las cajas."""
+    positioned = [dict(section) for section in sections]
+    remaining = max(0, int(rows_to_recover))
+    if not remaining:
+        return positioned
+
+    def overlaps_horizontally(left, right):
+        left_start = int(left.get("grid_column", 1))
+        left_end = left_start + int(left.get("column_span", 1))
+        right_start = int(right.get("grid_column", 1))
+        right_end = right_start + int(right.get("column_span", 1))
+        return left_start < right_end and left_end > right_start
+
+    # Desplaza como bloque las secciones situadas debajo de cada hueco. De
+    # esta forma no cambia la distribucion relativa disenada por el usuario.
+    starts = sorted({int(section.get("grid_row", 1)) for section in positioned})
+    for cut in reversed(starts[1:]):
+        if not remaining:
+            break
+        upper = [section for section in positioned if int(section.get("grid_row", 1)) < cut]
+        lower = [section for section in positioned if int(section.get("grid_row", 1)) >= cut]
+        if not lower:
+            continue
+
+        safe_shift = min(int(section.get("grid_row", 1)) - 1 for section in lower)
+        for lower_section in lower:
+            lower_row = int(lower_section.get("grid_row", 1))
+            for upper_section in upper:
+                if not overlaps_horizontally(lower_section, upper_section):
+                    continue
+                upper_end = int(upper_section.get("grid_row", 1)) + int(
+                    upper_section.get("row_span", 7)
+                )
+                safe_shift = min(safe_shift, lower_row - upper_end)
+
+        shift = min(remaining, max(0, safe_shift))
+        if not shift:
+            continue
+        for section in lower:
+            section["grid_row"] = int(section.get("grid_row", 1)) - shift
+        remaining -= shift
+
+    return positioned
+
+
 def constrained_layout_for_quotation(
     quotation,
     sections,
@@ -740,7 +786,12 @@ def constrained_layout_for_quotation(
     frame_height,
 ):
     """Evita que un encabezado alto cree otra hoja cuando el diseño aún cabe."""
-    constrained = constrained_template_layout(layout, sections)
+    header_visible = layout.get("_header_visible", True)
+    constrained = (
+        constrained_template_layout(layout, sections)
+        if header_visible
+        else dict(layout)
+    )
     item_section = next(
         (section for section in sections if section.get("key") == "items"),
         None,
@@ -769,17 +820,21 @@ def constrained_layout_for_quotation(
         image_paths,
         item_rows,
     )
-    header_story = [
-        standard_header(
-            quotation,
-            styles,
-            width,
-            constrained,
-            image_paths,
-            sections,
-        ),
-        Spacer(1, 5 * mm),
-    ]
+    header_story = (
+        [
+            standard_header(
+                quotation,
+                styles,
+                width,
+                constrained,
+                image_paths,
+                sections,
+            ),
+            Spacer(1, 5 * mm),
+        ]
+        if header_visible
+        else []
+    )
     overflow = (
         flowables_height(header_story, width)
         + flowables_height(body_story, width)
@@ -817,18 +872,45 @@ def constrained_layout_for_quotation(
                 image_paths,
                 item_rows,
             )
-    maximum_header_height = max(
-        18,
-        (frame_height - flowables_height(body_story, width) - 5 * mm) / mm,
-    )
-    if constrained.get("header_height_mm", 24) <= maximum_header_height:
-        return constrained, positioned_sections
     adjusted = dict(constrained)
-    adjusted["header_height_mm"] = maximum_header_height
-    adjusted["header_image_height_mm"] = min(
-        adjusted.get("header_image_height_mm", 16),
-        max(8, maximum_header_height - 4),
+    if header_visible:
+        maximum_header_height = max(
+            18,
+            (frame_height - flowables_height(body_story, width) - 5 * mm) / mm,
+        )
+        if adjusted.get("header_height_mm", 24) > maximum_header_height:
+            adjusted["header_height_mm"] = maximum_header_height
+            adjusted["header_image_height_mm"] = min(
+                adjusted.get("header_image_height_mm", 16),
+                max(8, maximum_header_height - 4),
+            )
+            header_story = [
+                standard_header(
+                    quotation,
+                    styles,
+                    width,
+                    adjusted,
+                    image_paths,
+                    sections,
+                ),
+                Spacer(1, 5 * mm),
+            ]
+
+    final_overflow = (
+        flowables_height(header_story, width)
+        + flowables_height(body_story, width)
+        - frame_height
     )
+    if final_overflow > 0 and positioned_sections:
+        row_gap = max(0, float(adjusted.get("row_gap_mm", 1)))
+        row_step = (EDITOR_ROW_HEIGHT_MM + row_gap * EDITOR_GAP_SCALE) * mm
+        positioned_sections = compact_vertical_gaps(
+            positioned_sections,
+            # ReportLab reserva una pequena tolerancia interna al decidir si
+            # el ultimo Flowable cabe. Recuperarla evita una pagina adicional
+            # causada solo por redondeos y paddings del marco.
+            ceil((final_overflow + 5 * mm) / row_step),
+        )
     return adjusted, positioned_sections
 
 
@@ -854,7 +936,7 @@ def standard_story(
     for index, (page_sections, item_rows) in enumerate(pages):
         if index:
             story.append(PageBreak())
-        else:
+        elif layout.get("_header_visible", True):
             story.extend([
                 standard_header(
                     quotation,
@@ -895,6 +977,16 @@ def draw_standard_footer(canvas, document):
 def quotation_pdf(quotation, paper="standard"):
     roll = paper == "roll"
     sections, layout, image_paths = snapshot_data(quotation)
+    company_section = next(
+        (section for section in sections if section.get("key") == "company"),
+        None,
+    )
+    layout = {
+        **layout,
+        "_header_visible": (
+            company_section is None or company_section.get("visible", True)
+        ),
+    }
     # Los tamaños de impresión son fijos para que las plantillas solo definan el contenido de la hoja.
     page_width = (80 if roll else 216) * mm
     item_count = quotation.items.count()

@@ -18,7 +18,7 @@ export function LoginPage() {
   const location = useLocation()
   const setAuthenticated = useAuthStore((state) => state.setAuthenticated)
 
-  const from = (location.state as { from?: string } | null)?.from ?? '/dashboard'
+  const from = (location.state as { from?: string } | null)?.from ?? '/'
 
   const {
     register,

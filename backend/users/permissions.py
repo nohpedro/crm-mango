@@ -1,5 +1,7 @@
 from rest_framework.permissions import BasePermission
 
+from .permission_dependencies import dependencies_for_code
+
 
 class IsAdministrator(BasePermission):
     """
@@ -67,6 +69,13 @@ class HasRoleModelPermission(BasePermission):
                 for permission in required_any_permissions
             )
 
+        required_all_permissions = getattr(view, "required_all_permissions", None)
+        if required_all_permissions:
+            return all(
+                self._has_permission(user, permission)
+                for permission in required_all_permissions
+            )
+
         queryset = getattr(view, "queryset", None)
         model = getattr(queryset, "model", None)
         if not model:
@@ -83,13 +92,24 @@ class HasRoleModelPermission(BasePermission):
         return self._has_permission(user, required_permission)
 
     @staticmethod
-    def _has_permission(user, permission_code: str) -> bool:
-        if user.has_perm(permission_code):
+    def _has_permission(user, permission_code: str, checked=None) -> bool:
+        if user.is_superuser or (
+            user.role and user.role.is_active and user.role.code == "ADMIN"
+        ):
             return True
-        if not user.role or not user.role.is_active:
-            return False
-        app_label, codename = permission_code.split(".", maxsplit=1)
-        return user.role.permissions.filter(
-            content_type__app_label=app_label,
-            codename=codename,
-        ).exists()
+        checked = set(checked or ())
+        if permission_code in checked:
+            return True
+        checked.add(permission_code)
+
+        assigned = user.has_perm(permission_code)
+        if user.role and user.role.is_active and not assigned:
+            app_label, codename = permission_code.split(".", maxsplit=1)
+            assigned = user.role.permissions.filter(
+                content_type__app_label=app_label,
+                codename=codename,
+            ).exists()
+        return assigned and all(
+            HasRoleModelPermission._has_permission(user, dependency, checked)
+            for dependency in dependencies_for_code(permission_code)
+        )

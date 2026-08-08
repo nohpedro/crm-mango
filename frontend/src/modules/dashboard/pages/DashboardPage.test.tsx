@@ -105,29 +105,24 @@ describe('DashboardPage', () => {
       </QueryClientProvider>,
     )
 
-    expect(
-      screen.getByText('Reportes comerciales no disponibles'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Reportes comerciales no disponibles')).toBeInTheDocument()
   })
 
   it('aplica el rango personalizado a la consulta del panel', async () => {
     let lastUrl = ''
     server.use(
-      http.get(
-        'http://localhost:8000/api/v1/quotations/dashboard/',
-        ({ request }) => {
-          lastUrl = request.url
-          return HttpResponse.json({
-            ...dashboardResponse,
-            period: {
-              key: 'custom',
-              label: 'Rango personalizado',
-              start: '2026-07-01',
-              end: '2026-07-26',
-            },
-          })
-        },
-      ),
+      http.get('http://localhost:8000/api/v1/quotations/dashboard/', ({ request }) => {
+        lastUrl = request.url
+        return HttpResponse.json({
+          ...dashboardResponse,
+          period: {
+            key: 'custom',
+            label: 'Rango personalizado',
+            start: '2026-07-01',
+            end: '2026-07-26',
+          },
+        })
+      }),
     )
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -143,12 +138,8 @@ describe('DashboardPage', () => {
     )
 
     await screen.findByText('Constructora Andina')
-    await user.click(
-      screen.getByRole('button', { name: /elegir fechas/i }),
-    )
-    await user.click(
-      screen.getByRole('button', { name: /mostrar este rango/i }),
-    )
+    await user.click(screen.getByRole('button', { name: /elegir fechas/i }))
+    await user.click(screen.getByRole('button', { name: /mostrar este rango/i }))
 
     await waitFor(() => {
       const url = new URL(lastUrl)
@@ -161,13 +152,10 @@ describe('DashboardPage', () => {
   it('filtra el panel y los reportes por estado de cotizaciÃ³n', async () => {
     let lastUrl = ''
     server.use(
-      http.get(
-        'http://localhost:8000/api/v1/quotations/dashboard/',
-        ({ request }) => {
-          lastUrl = request.url
-          return HttpResponse.json(dashboardResponse)
-        },
-      ),
+      http.get('http://localhost:8000/api/v1/quotations/dashboard/', ({ request }) => {
+        lastUrl = request.url
+        return HttpResponse.json(dashboardResponse)
+      }),
     )
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -188,5 +176,100 @@ describe('DashboardPage', () => {
     await waitFor(() => {
       expect(new URL(lastUrl).searchParams.get('status')).toBe('paid')
     })
+  })
+
+  it('busca clientes desde el panel sin cargar la lista antes de escribir', async () => {
+    let clientRequests = 0
+    server.use(
+      http.get('http://localhost:8000/api/v1/quotations/dashboard/', () =>
+        HttpResponse.json(dashboardResponse),
+      ),
+      http.get('http://localhost:8000/api/v1/clients/', () => {
+        clientRequests += 1
+        return HttpResponse.json({
+          count: 1,
+          next: null,
+          previous: null,
+          results: [
+            {
+              id: 'client-1',
+              name: 'Constructora Andina',
+              tax_id: '10203040',
+              department: 'La Paz',
+              city_zone: 'Centro',
+              whatsapp: '70000000',
+              client_type: 'Empresa o constructora',
+              price_level: { id: 'level-1', name: 'Mayorista', code: 'MAY' },
+              business_activity: 'Construcción',
+              observations: '',
+              is_active: true,
+              created_at: '2026-08-01T12:00:00Z',
+              updated_at: '2026-08-01T12:00:00Z',
+            },
+          ],
+        })
+      }),
+    )
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const user = userEvent.setup()
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('Productos más cotizados')
+    expect(clientRequests).toBe(0)
+    await user.type(
+      screen.getByRole('textbox', { name: 'Buscar cliente para analizar' }),
+      'Andina',
+    )
+
+    const link = await screen.findByRole('link', { name: /Ver ficha/i })
+    expect(link).toHaveAttribute('href', '/dashboard/clients/client-1')
+    expect(clientRequests).toBeGreaterThan(0)
+  })
+
+  it('restaura la búsqueda y los filtros del panel desde la URL', async () => {
+    let dashboardUrl = ''
+    server.use(
+      http.get('http://localhost:8000/api/v1/quotations/dashboard/', ({ request }) => {
+        dashboardUrl = request.url
+        return HttpResponse.json(dashboardResponse)
+      }),
+      http.get('http://localhost:8000/api/v1/clients/', () =>
+        HttpResponse.json({ count: 0, next: null, previous: null, results: [] }),
+      ),
+    )
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter
+          initialEntries={[
+            '/dashboard?client_search=Andina&period=week&status=paid',
+          ]}
+        >
+          <DashboardPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(
+      screen.getByRole('textbox', { name: 'Buscar cliente para analizar' }),
+    ).toHaveValue('Andina')
+    await waitFor(() => {
+      const url = new URL(dashboardUrl)
+      expect(url.searchParams.get('period')).toBe('week')
+      expect(url.searchParams.get('status')).toBe('paid')
+    })
+    expect(screen.getByText('Búsqueda de clientes')).toBeInTheDocument()
   })
 })

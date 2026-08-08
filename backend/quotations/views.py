@@ -56,13 +56,22 @@ class QuotationViewSet(viewsets.ModelViewSet):
     permission_classes = [HasRoleModelPermission]
     queryset = Quotation.objects.select_related("client", "created_by").prefetch_related("items", "items__product")
     search_fields = ["number", "client_name", "client_tax_id", "items__name", "items__sku"]
-    filterset_fields = ["status", "client"]
-    ordering_fields = ["number", "created_at", "updated_at", "status"]
-    ordering = ["-created_at"]
+    filterset_fields = ["status", "client", "quotation_date"]
+    ordering_fields = ["number", "quotation_date", "created_at", "updated_at", "status"]
+    ordering = ["-quotation_date", "-created_at"]
 
     def get_permissions(self):
         if self.action in {"dashboard", "report_pdf", "report_csv"}:
-            self.required_permission = "quotations.view_quotation"
+            self.required_permission = "quotations.view_dashboard"
+        elif (
+            self.action == "partial_update"
+            and "status" in self.request.data
+            and set(self.request.data).issubset({"status"})
+        ):
+            self.required_any_permissions = (
+                "quotations.change_quotation_status",
+                "quotations.change_quotation",
+            )
         return super().get_permissions()
 
     def perform_create(self, serializer):

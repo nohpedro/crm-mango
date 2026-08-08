@@ -1,17 +1,18 @@
 from django.contrib.auth.models import Permission
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Q
 
 from inventory.models import Warehouse
 from products.models import PriceLevel
-from users.demo_data import DEMO_USERS, ROLE_DEFINITIONS, SYSTEM_USERS
+from users.demo_data import LEGACY_SEED_USERNAMES, ROLE_DEFINITIONS, SEED_USERS
 from users.models import Role, User
 from quotations.models import QuotationTemplate
 from quotations.template_defaults import default_template_sections
 
 
 class Command(BaseCommand):
-    help = "Crea roles y usuarios de demostración para probar accesos del CRM."
+    help = "Crea los cuatro usuarios y roles iniciales del CRM."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -22,7 +23,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--reset-passwords",
             action="store_true",
-            help="También cambia la contraseña de las cuentas demo que ya existan.",
+            help="También cambia la contraseña de las cuentas semilla que ya existan.",
         )
 
     @transaction.atomic
@@ -30,11 +31,12 @@ class Command(BaseCommand):
         roles = self._seed_roles()
         self._seed_default_quotation_template()
         self._seed_business_defaults()
+        removed_users = self._remove_legacy_seed_users()
         created_users = []
         updated_users = []
         password = options["password"]
 
-        for definition in (*DEMO_USERS, *SYSTEM_USERS):
+        for definition in SEED_USERS:
             role = roles[definition["role_code"]]
             defaults = {
                 "email": definition["email"],
@@ -42,6 +44,8 @@ class Command(BaseCommand):
                 "last_name": definition["last_name"],
                 "role": role,
                 "is_active": True,
+                "is_staff": definition.get("is_staff", False),
+                "is_superuser": definition.get("is_superuser", False),
             }
             user, created = User.objects.get_or_create(
                 username=definition["username"],
@@ -53,14 +57,21 @@ class Command(BaseCommand):
                 created_users.append(user.username)
                 continue
 
+            seed_managed_identity = (
+                not user.email or user.email.endswith("@seed.idesem.local")
+            )
             for field, value in defaults.items():
+                if field in {"email", "first_name", "last_name"} and not seed_managed_identity:
+                    continue
                 setattr(user, field, value)
             if options["reset_passwords"]:
                 user.set_password(password)
             user.save()
             updated_users.append(user.username)
 
-        self.stdout.write(self.style.SUCCESS("Roles de demostración preparados."))
+        self.stdout.write(self.style.SUCCESS("Roles y usuarios principales preparados."))
+        if removed_users:
+            self.stdout.write(f"Cuentas semilla anteriores retiradas: {removed_users}.")
         if created_users:
             self.stdout.write(
                 "Cuentas nuevas: "
@@ -70,8 +81,18 @@ class Command(BaseCommand):
         if updated_users:
             self.stdout.write("Cuentas actualizadas: " + ", ".join(updated_users))
         self.stdout.write(
-            "Vuelve a iniciar sesión con una cuenta demo para comprobar su menú y accesos."
+            "Vuelve a iniciar sesión con una cuenta principal para comprobar su menú y accesos."
         )
+
+    @staticmethod
+    def _remove_legacy_seed_users() -> int:
+        obsolete = User.objects.filter(username__in=LEGACY_SEED_USERNAMES).filter(
+            Q(email__endswith="@seed.idesem.local")
+            | Q(username__startswith="demo_", email__endswith="@idesem.local")
+        )
+        count = obsolete.count()
+        obsolete.delete()
+        return count
 
     @staticmethod
     def _seed_business_defaults():

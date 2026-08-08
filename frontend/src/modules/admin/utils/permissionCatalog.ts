@@ -94,6 +94,15 @@ const resources: Record<string, ResourceDefinition> = {
   },
 }
 
+const permissionResources: Record<string, ResourceDefinition> = {
+  'quotations.view_dashboard': {
+    area: 'Inicio',
+    label: 'Panel principal',
+    description: 'Consulta indicadores comerciales y descarga sus reportes.',
+    order: 0,
+  },
+}
+
 const actionLabels: Record<string, string> = {
   add: 'Crear',
   change: 'Editar',
@@ -104,6 +113,8 @@ const actionLabels: Record<string, string> = {
 const customPermissionLabels: Record<string, string> = {
   configure_quotation_document: 'Configurar documento',
   manage_quotation_templates: 'Administrar plantillas',
+  change_quotation_status: 'Cambiar estado',
+  view_dashboard: 'Ver',
 }
 
 export type FriendlyPermission = Permission & {
@@ -115,7 +126,9 @@ export type FriendlyPermission = Permission & {
 }
 
 export function getFriendlyPermission(permission: Permission): FriendlyPermission | null {
-  const resource = resources[`${permission.app_label}.${permission.model}`]
+  const resource =
+    permissionResources[`${permission.app_label}.${permission.codename}`] ??
+    resources[`${permission.app_label}.${permission.model}`]
   const action = permission.codename.split('_')[0]
   const actionLabel = customPermissionLabels[permission.codename] ?? actionLabels[action]
   if (!resource || !actionLabel) return null

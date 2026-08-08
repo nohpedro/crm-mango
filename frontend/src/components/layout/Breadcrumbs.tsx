@@ -30,8 +30,8 @@ export function Breadcrumbs() {
       className="flex items-center gap-1.5 text-xs text-slate-500"
     >
       <Link
-        to="/dashboard"
-        aria-label="Panel principal"
+        to="/"
+        aria-label="Inicio"
         className="rounded p-1 hover:text-brand-600"
       >
         <House className="size-3.5" />

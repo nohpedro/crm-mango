@@ -1,7 +1,7 @@
 param(
   [string]$FrontendUrl = "http://localhost:5173",
   [string]$ApiUrl = "http://localhost:8000/api/v1",
-  [string]$Username = "demo_admin",
+  [string]$Username = "superadmin",
   [string]$Password = "Demo12345!",
   [switch]$Headed,
   [int]$SlowMo = 0

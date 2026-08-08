@@ -1,6 +1,7 @@
 import base64
 import re
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -45,13 +46,16 @@ class QuotationApiTests(APITestCase):
         role = Role.objects.create(name="Ventas", code="SALES")
         role.permissions.add(
             *Permission.objects.filter(
-                content_type__app_label="quotations",
+                content_type__app_label__in=["quotations", "clients", "products"],
                 codename__in=[
                     "add_quotation",
                     "view_quotation",
+                    "view_dashboard",
                     "change_quotation",
                     "configure_quotation_document",
                     "manage_quotation_templates",
+                    "view_client",
+                    "view_product",
                 ],
             )
         )
@@ -84,12 +88,69 @@ class QuotationApiTests(APITestCase):
             "items": [{"product": self.product.id, "quantity": 2, "unit_price": "250.50"}],
         }
 
+    def test_hidden_company_section_removes_standard_header_from_pdf(self):
+        sections = default_template_sections()
+        next(item for item in sections if item["key"] == "company")["visible"] = False
+        template = QuotationTemplate.objects.create(
+            name="Sin encabezado",
+            sections=sections,
+            layout=default_template_layout(),
+        )
+        payload = {**self.payload(), "template": template.id}
+        response = self.client.post("/api/v1/quotations/", payload, format="json")
+        quotation = Quotation.objects.get(pk=response.data["id"])
+
+        with patch("quotations.pdf.standard_header", wraps=standard_header) as header:
+            document = quotation_pdf(quotation, "standard")
+
+        self.assertTrue(document.startswith(b"%PDF"))
+        header.assert_not_called()
+
+    def test_header_does_not_change_saved_card_positions(self):
+        sections = default_template_sections()
+        for section in sections:
+            section.update(
+                {
+                    "visible": section["key"] in {"company", "client", "items"},
+                    "grid_row": 1,
+                    "grid_column": 1,
+                    "column_span": 12,
+                    "row_span": 8,
+                }
+            )
+        next(item for item in sections if item["key"] == "company")["row_span"] = 80
+        next(item for item in sections if item["key"] == "items")["grid_row"] = 12
+
+        response = self.client.post(
+            "/api/v1/quotations/templates/",
+            {
+                "name": "Posiciones estables",
+                "sections": sections,
+                "layout": default_template_layout(),
+                "is_active": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        saved = {section["key"]: section for section in response.data["sections"]}
+        self.assertEqual(saved["client"]["grid_row"], 1)
+        self.assertEqual(saved["items"]["grid_row"], 12)
+
     def test_document_configuration_requires_its_own_permission(self):
         limited_role = Role.objects.create(name="Cotizador básico", code="BASIC_SALES")
         limited_role.permissions.add(
-            Permission.objects.get(
+            *Permission.objects.filter(
                 content_type__app_label="quotations",
-                codename="add_quotation",
+                codename__in=["add_quotation", "view_quotation"],
+            ),
+            Permission.objects.get(
+                content_type__app_label="clients",
+                codename="view_client",
+            ),
+            Permission.objects.get(
+                content_type__app_label="products",
+                codename="view_product",
             )
         )
         limited_user = get_user_model().objects.create_user(
@@ -337,6 +398,34 @@ class QuotationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["status"], Quotation.Status.PENDING)
 
+    def test_quotation_date_defaults_to_today_and_accepts_a_selected_date(self):
+        automatic = self.client.post(
+            "/api/v1/quotations/", self.payload(), format="json"
+        )
+        selected_payload = self.payload()
+        selected_payload["quotation_date"] = "2026-07-15"
+        selected = self.client.post(
+            "/api/v1/quotations/", selected_payload, format="json"
+        )
+
+        self.assertEqual(automatic.status_code, status.HTTP_201_CREATED, automatic.data)
+        self.assertEqual(automatic.data["quotation_date"], timezone.localdate().isoformat())
+        self.assertEqual(selected.status_code, status.HTTP_201_CREATED, selected.data)
+        self.assertEqual(selected.data["quotation_date"], "2026-07-15")
+        self.assertEqual(
+            Quotation.objects.get(pk=selected.data["id"]).quotation_date.isoformat(),
+            "2026-07-15",
+        )
+
+    def test_quotation_date_error_is_shown_in_spanish(self):
+        payload = self.payload()
+        payload["quotation_date"] = "fecha-invalida"
+
+        response = self.client.post("/api/v1/quotations/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("fecha válida", response.data["quotation_date"][0])
+
     def test_status_can_be_changed_with_a_partial_update(self):
         created = self.client.post(
             "/api/v1/quotations/",
@@ -364,6 +453,42 @@ class QuotationApiTests(APITestCase):
         self.assertEqual(response.data["status"], Quotation.Status.PENDING)
         self.assertEqual(response.data["client_name"], self.customer.name)
 
+    def test_status_permission_does_not_allow_editing_the_quotation(self):
+        created = self.client.post(
+            "/api/v1/quotations/",
+            self.payload(),
+            format="json",
+        )
+        role = Role.objects.create(name="Estados de cotización", code="QUOTE_STATUS")
+        role.permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="quotations",
+                codename__in=["view_quotation", "change_quotation_status"],
+            )
+        )
+        status_user = get_user_model().objects.create_user(
+            username="quotation-status",
+            email="quotation-status@example.com",
+            password="safe-password",
+            role=role,
+        )
+        self.client.force_authenticate(status_user)
+
+        changed = self.client.patch(
+            f"/api/v1/quotations/{created.data['id']}/",
+            {"status": "paid"},
+            format="json",
+        )
+        rejected = self.client.patch(
+            f"/api/v1/quotations/{created.data['id']}/",
+            {"notes": "Edición no permitida"},
+            format="json",
+        )
+
+        self.assertEqual(changed.status_code, status.HTTP_200_OK)
+        self.assertEqual(changed.data["status"], Quotation.Status.PAID)
+        self.assertEqual(rejected.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_dashboard_filters_quotations_by_status(self):
         pending = self.client.post("/api/v1/quotations/", self.payload(), format="json")
         self.assertEqual(pending.status_code, status.HTTP_201_CREATED)
@@ -389,6 +514,35 @@ class QuotationApiTests(APITestCase):
             response.data["top_clients"][0]["client_name"],
             self.customer.name,
         )
+
+    def test_dashboard_uses_its_own_permission(self):
+        role = Role.objects.create(name="Solo panel", code="DASHBOARD_ONLY")
+        role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="quotations",
+                codename="view_dashboard",
+            )
+        )
+        dashboard_user = get_user_model().objects.create_user(
+            username="dashboard-only",
+            email="dashboard-only@example.com",
+            password="safe-password",
+            role=role,
+        )
+        self.client.force_authenticate(dashboard_user)
+        allowed = self.client.get("/api/v1/quotations/dashboard/?period=month")
+
+        role.permissions.clear()
+        role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="quotations",
+                codename="view_quotation",
+            )
+        )
+        denied = self.client.get("/api/v1/quotations/dashboard/?period=month")
+
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK)
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_notifications_report_pending_quotations(self):
         pending_payload = self.payload()
@@ -716,6 +870,44 @@ class QuotationApiTests(APITestCase):
             max(8, maximum - 4),
         )
         self.assertEqual(page_count, 1)
+
+    def test_static_final_card_uses_free_space_instead_of_creating_extra_page(self):
+        payload = self.payload()
+        payload["items"] = [
+            {"product": self.product.id, "quantity": quantity}
+            for quantity in (1, 2, 3)
+        ]
+        response = self.client.post("/api/v1/quotations/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        quotation = Quotation.objects.prefetch_related("items").get(pk=response.data["id"])
+        sections = normalized_template_sections(default_template_sections())
+        positions = {
+            "client": (1, 8),
+            "commercial_terms": (11, 7),
+            "items": (25, 40),
+            "totals": (80, 7),
+            "bank_details": (108, 7),
+            "contact": (130, 7),
+        }
+        for section in sections:
+            section["visible"] = section["key"] in positions or section["key"] == "company"
+            if section["key"] in positions:
+                section["grid_row"], section["row_span"] = positions[section["key"]]
+        quotation.template_snapshot = {
+            "name": "Ultima tarjeta en la misma hoja",
+            "sections": sections,
+            "layout": default_template_layout(),
+            "images": [],
+        }
+
+        document = quotation_pdf(quotation, "standard")
+        page_count = len(re.findall(rb"/Type\s*/Page\b", document))
+
+        self.assertEqual(page_count, 1)
+        self.assertEqual(
+            next(section for section in sections if section["key"] == "contact")["grid_row"],
+            130,
+        )
 
     def test_roll_uses_only_selected_header_image_and_fixed_texts(self):
         response = self.client.post("/api/v1/quotations/", self.payload(), format="json")

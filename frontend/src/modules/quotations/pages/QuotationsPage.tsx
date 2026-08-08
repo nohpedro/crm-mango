@@ -7,7 +7,7 @@ import { PageHeading } from '../../../components/common/PageHeading'
 import { AdminTable, Pagination } from '../../admin/components/AdminTable'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { useAuthStore } from '../../../store/authStore'
-import { hasPermission } from '../../../utils/permissions'
+import { hasAnyPermission, hasPermission } from '../../../utils/permissions'
 import { useQuotationMutations, useQuotations } from '../hooks/useQuotations'
 import type { QuotationStatus } from '../types/quotation.types'
 
@@ -18,14 +18,17 @@ const statusLabel: Record<QuotationStatus, string> = {
 
 export function QuotationsPage() {
   const user = useAuthStore((state) => state.user)
-  const canChangeStatus = hasPermission(user, 'quotations.change_quotation')
+  const canChangeStatus = hasAnyPermission(user, [
+    'quotations.change_quotation_status',
+    'quotations.change_quotation',
+  ])
   const canCreate = hasPermission(user, 'quotations.add_quotation')
   const mutations = useQuotationMutations()
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const status = searchParams.get('status') ?? ''
   const [page, setPage] = useState(1)
-  const query = useQuotations({ search, status, page, ordering: '-created_at' })
+  const query = useQuotations({ search, status, page, ordering: '-quotation_date' })
   const quotations = query.data?.results ?? []
   const changeStatus = (id: string, nextStatus: QuotationStatus) => {
     void mutations.updateStatus
@@ -154,7 +157,7 @@ export function QuotationsPage() {
               )}
             </td>
             <td className="px-5 py-4 text-sm text-slate-600">
-              {new Date(quotation.created_at).toLocaleDateString('es-BO')}
+              {formatQuotationDate(quotation.quotation_date)}
             </td>
             <td className="px-5 py-4">
               <Link
@@ -172,4 +175,8 @@ export function QuotationsPage() {
       )}
     </>
   )
+}
+
+function formatQuotationDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString('es-BO')
 }

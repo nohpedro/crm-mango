@@ -144,9 +144,7 @@ export function QuotationTemplatesPage() {
           ),
           column_span: Math.max(
             1,
-            Math.round(
-              ((section.column_span ?? previousColumns) / previousColumns) * 12,
-            ),
+            Math.round(((section.column_span ?? previousColumns) / previousColumns) * 12),
           ),
         }),
       ),
@@ -490,6 +488,7 @@ function VisualEditor({
   const selected = sections.find((item) => item.key === selectedKey)
   const movingSection = sections.find((item) => item.key === movingKey)
   const companySection = sections.find((item) => item.key === 'company')
+  const headerVisible = companySection?.visible !== false
   const companyLines = (
     companySection?.content || 'IDESEM\nSoluciones comerciales y técnicas'
   )
@@ -504,10 +503,7 @@ function VisualEditor({
   const headerImage = layout.header_image_id
     ? imagesById.get(layout.header_image_id)
     : undefined
-  const maximumHeaderHeight = maximumHeaderHeightForSections(
-    sections,
-    layout.row_gap_mm,
-  )
+  const maximumHeaderHeight = maximumHeaderHeightForSections(sections, layout.row_gap_mm)
   const headerHeight = Math.max(
     18,
     Math.min(maximumHeaderHeight, layout.header_height_mm ?? 24),
@@ -518,7 +514,9 @@ function VisualEditor({
     8,
     Math.min(maximumHeaderImageHeight, layout.header_image_height_mm ?? 16),
   )
-  const headerPreviewHeight = Math.max(76, Math.min(180, headerHeight * 1.6))
+  const headerPreviewHeight = headerVisible
+    ? Math.max(76, Math.min(180, headerHeight * 1.6))
+    : 0
   const columns = layout.columns
   const commit = (
     nextSections: QuotationTemplateSection[],
@@ -535,25 +533,17 @@ function VisualEditor({
     )
   }
   const changeHeaderHeight = (requestedHeight: number) => {
-    const nextHeight = Math.max(
-      18,
-      Math.min(maximumHeaderHeight, requestedHeight),
-    )
+    const nextHeight = Math.max(18, Math.min(maximumHeaderHeight, requestedHeight))
     let nextSections = sections
     if (nextHeight > headerHeight) {
-      const rowStep =
-        EDITOR_ROW_HEIGHT_MM + layout.row_gap_mm * EDITOR_GAP_SCALE
+      const rowStep = EDITOR_ROW_HEIGHT_MM + layout.row_gap_mm * EDITOR_GAP_SCALE
       const firstRow = sections.reduce((minimum, section) => {
         if (!section.visible || section.key === 'company') return minimum
         return Math.min(minimum, section.grid_row ?? 1)
       }, MAX_ROWS + 1)
       const availableRows = Math.max(0, firstRow - 1)
-      const accumulated =
-        headerShiftRemainder.current + nextHeight - headerHeight
-      const rowsToShift = Math.min(
-        availableRows,
-        Math.floor(accumulated / rowStep),
-      )
+      const accumulated = headerShiftRemainder.current + nextHeight - headerHeight
+      const rowsToShift = Math.min(availableRows, Math.floor(accumulated / rowStep))
       headerShiftRemainder.current = accumulated - rowsToShift * rowStep
       if (rowsToShift) {
         nextSections = sections.map((section) =>
@@ -603,7 +593,7 @@ function VisualEditor({
     const span = source.column_span ?? 1
     const rows = source.row_span ?? 7
     return !sections.some((item) => {
-      if (item.key === key || !item.visible) return false
+      if (item.key === key || item.key === 'company' || !item.visible) return false
       const itemColumn = item.grid_column ?? 1
       const itemRow = item.grid_row ?? 1
       return (
@@ -716,6 +706,10 @@ function VisualEditor({
     const current = sections.find((item) => item.key === key)
     if (!current) return
     const updated = withVisualDefaults({ ...current, ...patch })
+    if (key === 'company') {
+      commit(sections.map((item) => (item.key === key ? updated : item)))
+      return
+    }
     commit(
       resolveTemplateSections(
         sections.map((item) => (item.key === key ? updated : item)),
@@ -790,8 +784,12 @@ function VisualEditor({
   }
   const removeSelected = () => {
     if (!selected) return
-    if (selected.type === 'system') update(selected.key, { visible: false })
-    else setConfirmKey(selected.key)
+    if (selected.type === 'system') {
+      update(selected.key, { visible: false })
+      setSelectedKey(
+        sections.find((item) => item.visible && item.key !== selected.key)?.key ?? null,
+      )
+    } else setConfirmKey(selected.key)
   }
   const duplicateSelected = () => {
     if (!selected) return
@@ -863,68 +861,70 @@ function VisualEditor({
             backgroundSize: '8px 8px',
           }}
         >
-          <header
-            onDoubleClick={() => {
-              setSelectedKey('company')
-              setMode('content')
-            }}
-            className="relative z-20 flex h-20 cursor-pointer justify-between border-b-2 border-brand-700 bg-white pb-3"
-            title="Doble clic para editar el texto del encabezado"
-            style={{ height: `${headerPreviewHeight}px` }}
-          >
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              {headerImage && (
-                <img
-                  src={headerImage.image}
-                  alt="Encabezado"
-                  className="shrink-0 object-contain"
-                  style={{
-                    width: `${headerImageWidth * 1.5}px`,
-                    height: `${Math.min(
-                      headerPreviewHeight - 12,
-                      headerImageHeight * 1.6,
-                    )}px`,
-                    maxWidth: '55%',
-                  }}
-                />
-              )}
-              <div className="min-w-0">
-                <b
-                  className="block leading-tight text-brand-900"
-                  style={{
-                    fontSize: `${layout.header_company_font_size ?? 14}px`,
-                  }}
-                >
-                  {headerName}
-                </b>
-                <p
-                  className="leading-tight text-slate-500"
-                  style={{
-                    fontSize: `${layout.header_subtitle_font_size ?? 8}px`,
-                  }}
-                >
-                  {headerSubtitle}
-                </p>
+          {headerVisible && (
+            <header
+              onDoubleClick={() => {
+                setSelectedKey('company')
+                setMode('content')
+              }}
+              className="relative z-20 flex h-20 cursor-pointer justify-between border-b-2 border-brand-700 bg-white pb-3"
+              title="Doble clic para editar el texto del encabezado"
+              style={{ height: `${headerPreviewHeight}px` }}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                {headerImage && (
+                  <img
+                    src={headerImage.image}
+                    alt="Encabezado"
+                    className="shrink-0 object-contain"
+                    style={{
+                      width: `${headerImageWidth * 1.5}px`,
+                      height: `${Math.min(
+                        headerPreviewHeight - 12,
+                        headerImageHeight * 1.6,
+                      )}px`,
+                      maxWidth: '55%',
+                    }}
+                  />
+                )}
+                <div className="min-w-0">
+                  <b
+                    className="block leading-tight text-brand-900"
+                    style={{
+                      fontSize: `${layout.header_company_font_size ?? 14}px`,
+                    }}
+                  >
+                    {headerName}
+                  </b>
+                  <p
+                    className="leading-tight text-slate-500"
+                    style={{
+                      fontSize: `${layout.header_subtitle_font_size ?? 8}px`,
+                    }}
+                  >
+                    {headerSubtitle}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="max-w-[42%] shrink-0 text-right">
-              <b
-                className="text-brand-900"
-                style={{
-                  fontSize: `${layout.header_document_title_font_size ?? 12}px`,
-                }}
-              >
-                {layout.header_document_title || 'COTIZACI\u00d3N'}
-              </b>
-              <p className="text-xs text-slate-500">COT-000001 · 15/07/2026</p>
-            </div>
-          </header>
+              <div className="max-w-[42%] shrink-0 text-right">
+                <b
+                  className="text-brand-900"
+                  style={{
+                    fontSize: `${layout.header_document_title_font_size ?? 12}px`,
+                  }}
+                >
+                  {layout.header_document_title || 'COTIZACI\u00d3N'}
+                </b>
+                <p className="text-xs text-slate-500">COT-000001 · 15/07/2026</p>
+              </div>
+            </header>
+          )}
           <div
             ref={gridPage}
-            className="relative mt-4 grid"
+            className={`relative grid ${headerVisible ? 'mt-4' : ''}`}
             style={{
               ...grid,
-              height: `calc(100% - ${headerPreviewHeight + 48}px)`,
+              height: `calc(100% - ${headerVisible ? headerPreviewHeight + 48 : 40}px)`,
             }}
           >
             {[...Array(Math.max(0, columns - 1))].map((_, index) => (
@@ -955,7 +955,7 @@ function VisualEditor({
               </div>
             )}
             {sections
-              .filter((item) => item.visible)
+              .filter((item) => item.visible && item.key !== 'company')
               .map((item) => (
                 <Block
                   key={item.key}
@@ -1013,7 +1013,7 @@ function VisualEditor({
                   onClick={() => show(item.key)}
                   className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700"
                 >
-                  + {item.title}
+                  + {item.key === 'company' ? 'Encabezado' : item.title}
                 </button>
               ))
             ) : (
@@ -1131,8 +1131,8 @@ function Properties({
       {isHeader ? (
         <>
           <p className="mt-3 rounded-lg bg-white p-3 text-xs text-slate-600">
-            El logotipo y el nombre siempre se mantienen visibles juntos. El alto del logo
-            depende del espacio definido para el encabezado.
+            El logotipo y el nombre se muestran juntos. Puedes ocultar todo el encabezado
+            y recuperarlo después desde Secciones disponibles.
           </p>
           <TextInput
             label="Nombre de la empresa"
@@ -1333,23 +1333,25 @@ function Properties({
           <RotateCcw className="size-3" /> Restaurar
         </button>
         {!isHeader && (
-          <>
-            <button
-              type="button"
-              onClick={onDuplicate}
-              className="text-xs font-bold text-slate-700"
-            >
-              Duplicar
-            </button>
-            <button
-              type="button"
-              onClick={onRemove}
-              className="text-xs font-bold text-red-700"
-            >
-              {section.type === 'system' ? 'Ocultar' : 'Eliminar'}
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={onDuplicate}
+            className="text-xs font-bold text-slate-700"
+          >
+            Duplicar
+          </button>
         )}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-xs font-bold text-red-700"
+        >
+          {isHeader
+            ? 'Ocultar encabezado'
+            : section.type === 'system'
+              ? 'Ocultar'
+              : 'Eliminar'}
+        </button>
       </div>
     </aside>
   )
@@ -1669,30 +1671,34 @@ export function maximumHeaderHeightForSections(
   rowGapMm = 1,
 ) {
   const rowStep = EDITOR_ROW_HEIGHT_MM + rowGapMm * EDITOR_GAP_SCALE
-  const occupied = sections.reduce<{ first: number | null; last: number }>((result, section) => {
-    if (!section.visible || section.key === 'company') return result
-    const row = Math.max(1, section.grid_row ?? 1)
-    const rowSpan = Math.max(3, section.row_span ?? 8)
-    const gridHeight =
-      rowSpan * EDITOR_ROW_HEIGHT_MM +
-      Math.max(0, rowSpan - 1) * rowGapMm * EDITOR_GAP_SCALE
-    const reservedHeight = Math.max(section.min_height_mm ?? 0, gridHeight)
-    const start = (row - 1) * rowStep
-    return {
-      first: result.first === null ? start : Math.min(result.first, start),
-      last: Math.max(result.last, start + reservedHeight),
-    }
-  }, { first: null, last: 0 })
-  const occupiedHeight =
-    occupied.first === null ? 0 : occupied.last - occupied.first
-  const available =
-    STANDARD_FRAME_HEIGHT_MM - STANDARD_HEADER_GAP_MM - occupiedHeight
+  const occupied = sections.reduce<{ first: number | null; last: number }>(
+    (result, section) => {
+      if (!section.visible || section.key === 'company') return result
+      const row = Math.max(1, section.grid_row ?? 1)
+      const rowSpan = Math.max(3, section.row_span ?? 8)
+      const gridHeight =
+        rowSpan * EDITOR_ROW_HEIGHT_MM +
+        Math.max(0, rowSpan - 1) * rowGapMm * EDITOR_GAP_SCALE
+      const reservedHeight = Math.max(section.min_height_mm ?? 0, gridHeight)
+      const start = (row - 1) * rowStep
+      return {
+        first: result.first === null ? start : Math.min(result.first, start),
+        last: Math.max(result.last, start + reservedHeight),
+      }
+    },
+    { first: null, last: 0 },
+  )
+  const occupiedHeight = occupied.first === null ? 0 : occupied.last - occupied.first
+  const available = STANDARD_FRAME_HEIGHT_MM - STANDARD_HEADER_GAP_MM - occupiedHeight
   return Math.max(18, Math.min(120, Math.floor(available * 10) / 10))
 }
 function constrainHeaderLayout(
   layout: QuotationTemplateLayout,
   sections: QuotationTemplateSection[],
 ): QuotationTemplateLayout {
+  const headerVisible =
+    sections.find((section) => section.key === 'company')?.visible !== false
+  if (!headerVisible) return layout
   const maximum = maximumHeaderHeightForSections(sections, layout.row_gap_mm)
   const headerHeight = Math.min(layout.header_height_mm ?? 24, maximum)
   return {
@@ -1726,7 +1732,7 @@ export function resolveTemplateSections(
   if (source.key === 'items') {
     const requestedEndColumn = col + span - 1
     const nextOccupiedRow = sections.reduce((closest, item) => {
-      if (item.key === key || !item.visible) return closest
+      if (item.key === key || item.key === 'company' || !item.visible) return closest
       const itemColumn = item.grid_column ?? 1
       const itemEndColumn = itemColumn + (item.column_span ?? 1) - 1
       const itemRow = item.grid_row ?? 1
@@ -1758,7 +1764,13 @@ export function resolveTemplateSections(
     candidate: QuotationTemplateSection,
     other: QuotationTemplateSection,
   ) => {
-    if (!candidate.visible || !other.visible) return false
+    if (
+      candidate.key === 'company' ||
+      other.key === 'company' ||
+      !candidate.visible ||
+      !other.visible
+    )
+      return false
     const candidateStart = candidate.grid_column ?? 1
     const candidateEnd = candidateStart + (candidate.column_span ?? 1) - 1
     const otherStart = other.grid_column ?? 1

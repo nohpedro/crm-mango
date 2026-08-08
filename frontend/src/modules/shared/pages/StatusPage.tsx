@@ -27,10 +27,10 @@ export function StatusPage({
         <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">{title}</h1>
         <p className="mt-3 text-sm leading-6 text-slate-500">{description}</p>
         <Link
-          to="/dashboard"
+          to="/"
           className="mt-7 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white hover:bg-brand-700"
         >
-          <ArrowLeft className="size-4" /> Volver al panel
+          <ArrowLeft className="size-4" /> Volver al inicio
         </Link>
       </div>
     </main>

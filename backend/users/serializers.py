@@ -8,6 +8,11 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Role, User
+from .permission_dependencies import (
+    effective_permission_codes,
+    missing_dependencies,
+    permission_label,
+)
 
 
 class PermissionSerializer(serializers.ModelSerializer):
@@ -127,6 +132,17 @@ class RoleSerializer(serializers.ModelSerializer):
 
         return value
 
+    def validate_permissions(self, value):
+        missing = missing_dependencies(value)
+        if missing:
+            labels = ", ".join(
+                permission_label(code) for code in sorted(missing)
+            )
+            raise serializers.ValidationError(
+                f"Primero asigna los permisos necesarios: {labels}."
+            )
+        return value
+
 
 class UserReadSerializer(serializers.ModelSerializer):
     """
@@ -184,7 +200,7 @@ class UserReadSerializer(serializers.ModelSerializer):
                 f"{permission.content_type.app_label}.{permission.codename}"
                 for permission in obj.role.permissions.select_related("content_type").all()
             )
-        return sorted(permissions)
+        return sorted(effective_permission_codes(permissions))
 
 
 class UserWriteSerializer(serializers.ModelSerializer):

@@ -1,21 +1,25 @@
 import {
+  ArrowRight,
   CalendarRange,
   CalendarDays,
+  ChevronDown,
   FileSpreadsheet,
   FileText,
   ReceiptText,
   RefreshCw,
+  Search,
   ShoppingBag,
   UsersRound,
 } from 'lucide-react'
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useDeferredValue, useState } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { PageHeading } from '../../../components/common/PageHeading'
 import { useAuthStore } from '../../../store/authStore'
 import { hasPermission } from '../../../utils/permissions'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
+import { useClients } from '../../clients/hooks/useClients'
 import { useDashboard } from '../hooks/useDashboard'
 import { dashboardService } from '../services/dashboard.service'
 import type {
@@ -56,22 +60,50 @@ const localIsoDate = (value = new Date()) => {
 const initialRange = (): Required<DashboardRange> => {
   const today = new Date()
   return {
-    start_date: localIsoDate(
-      new Date(today.getFullYear(), today.getMonth(), 1),
-    ),
+    start_date: localIsoDate(new Date(today.getFullYear(), today.getMonth(), 1)),
     end_date: localIsoDate(today),
   }
 }
 
 export function DashboardPage() {
   const user = useAuthStore((state) => state.user)
-  const canViewReports = hasPermission(user, 'quotations.view_quotation')
-  const [period, setPeriod] = useState<DashboardPeriod>('month')
-  const [statusFilter, setStatusFilter] = useState<DashboardStatus>('all')
-  const [rangeDraft, setRangeDraft] = useState(initialRange)
-  const [appliedRange, setAppliedRange] = useState(initialRange)
+  const canViewReports = hasPermission(user, 'quotations.view_dashboard')
+  const canViewClients = hasPermission(user, 'clients.view_client')
+  const canViewClientAnalytics =
+    canViewClients && hasPermission(user, 'quotations.view_quotation')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const periodParam = searchParams.get('period')
+  const period: DashboardPeriod = ['day', 'week', 'month', 'custom'].includes(periodParam ?? '')
+    ? (periodParam as DashboardPeriod)
+    : 'month'
+  const statusParam = searchParams.get('status')
+  const statusFilter: DashboardStatus = ['all', 'pending', 'paid'].includes(statusParam ?? '')
+    ? (statusParam as DashboardStatus)
+    : 'all'
+  const fallbackRange = initialRange()
+  const appliedRange: Required<DashboardRange> = {
+    start_date: searchParams.get('start_date') || fallbackRange.start_date,
+    end_date: searchParams.get('end_date') || fallbackRange.end_date,
+  }
+  const [rangeDraft, setRangeDraft] = useState(appliedRange)
   const [downloading, setDownloading] = useState<'pdf' | 'csv' | null>(null)
   const report = useDashboard(period, appliedRange, statusFilter, canViewReports)
+
+  const updateFilters = (changes: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(changes).forEach(([key, value]) => {
+      if (value) next.set(key, value)
+      else next.delete(key)
+    })
+    setSearchParams(next)
+  }
+
+  const selectPeriod = (nextPeriod: DashboardPeriod) =>
+    updateFilters({
+      period: nextPeriod,
+      start_date: nextPeriod === 'custom' ? appliedRange.start_date : null,
+      end_date: nextPeriod === 'custom' ? appliedRange.end_date : null,
+    })
 
   const applyCustomRange = () => {
     const start = new Date(`${rangeDraft.start_date}T00:00:00`)
@@ -89,8 +121,11 @@ export function DashboardPage() {
       toast.error('El rango personalizado no puede superar 366 días.')
       return
     }
-    setAppliedRange(rangeDraft)
-    setPeriod('custom')
+    updateFilters({
+      period: 'custom',
+      start_date: rangeDraft.start_date,
+      end_date: rangeDraft.end_date,
+    })
   }
 
   const downloadReport = async (format: 'pdf' | 'csv') => {
@@ -112,14 +147,10 @@ export function DashboardPage() {
       anchor.remove()
       URL.revokeObjectURL(url)
       toast.success(
-        format === 'pdf'
-          ? 'Reporte PDF descargado.'
-          : 'Datos CSV descargados.',
+        format === 'pdf' ? 'Reporte PDF descargado.' : 'Datos CSV descargados.',
       )
     } catch (error) {
-      toast.error(
-        getAdminErrorMessage(error, 'No se pudo descargar el reporte.'),
-      )
+      toast.error(getAdminErrorMessage(error, 'No se pudo descargar el reporte.'))
     } finally {
       setDownloading(null)
     }
@@ -137,9 +168,8 @@ export function DashboardPage() {
             Reportes comerciales no disponibles
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-amber-800">
-            Tu rol no tiene permiso para consultar cotizaciones. Un administrador
-            puede habilitar el permiso “Ver cotizaciones” para mostrar estas
-            métricas.
+            Tu rol no tiene permiso para consultar este panel. Un administrador puede
+            habilitar “Ver” en Panel principal desde Roles y permisos.
           </p>
         </section>
       </>
@@ -162,12 +192,40 @@ export function DashboardPage() {
         }
       />
 
-      <section className="mb-5 flex flex-col gap-4 rounded-2xl border border-brand-100 bg-brand-50/60 p-4 lg:flex-row lg:items-center lg:justify-between">
+      {canViewClientAnalytics && <ClientLookup />}
+
+      <details className="group mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 transition hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700">
+            <CalendarRange className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-slate-900">Filtros y reportes</p>
+            <p className="mt-0.5 truncate text-xs text-slate-500">
+              {statusFilter === 'all'
+                ? 'Todas las cotizaciones'
+                : statusFilter === 'paid'
+                  ? 'Solo pagadas'
+                  : 'Solo pendientes'}{' '}
+              ·{' '}
+              {period === 'custom'
+                ? 'Fechas personalizadas'
+                : periods.find((item) => item.key === period)?.label ?? 'Este mes'}
+            </p>
+          </div>
+          <span className="hidden text-xs font-semibold text-slate-500 sm:inline">
+            Mostrar opciones
+          </span>
+          <ChevronDown className="size-5 shrink-0 text-slate-500 transition-transform duration-200 group-open:rotate-180" />
+        </summary>
+
+        <div className="border-t border-slate-100 bg-slate-50/40 p-4">
+      <section className="mb-4 flex flex-col gap-4 rounded-2xl border border-brand-100 bg-brand-50/60 p-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="font-bold text-brand-900">¿Qué información se muestra?</p>
           <p className="mt-1 text-sm text-brand-800">
-            Filtra las cotizaciones por estado y periodo. El mismo filtro se
-            aplicará al panel, al reporte PDF y a los datos CSV.
+            Filtra las cotizaciones por estado y periodo. El mismo filtro se aplicará al
+            panel, al reporte PDF y a los datos CSV.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -202,15 +260,17 @@ export function DashboardPage() {
 
       <section className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
         <span className="text-sm font-bold text-slate-700">Estado:</span>
-        {([
-          ['all', 'Todas'],
-          ['pending', 'Pendientes'],
-          ['paid', 'Pagadas'],
-        ] as Array<[DashboardStatus, string]>).map(([key, label]) => (
+        {(
+          [
+            ['all', 'Todas'],
+            ['pending', 'Pendientes'],
+            ['paid', 'Pagadas'],
+          ] as Array<[DashboardStatus, string]>
+        ).map(([key, label]) => (
           <button
             key={key}
             type="button"
-            onClick={() => setStatusFilter(key)}
+            onClick={() => updateFilters({ status: key })}
             className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
               statusFilter === key
                 ? key === 'paid'
@@ -243,7 +303,7 @@ export function DashboardPage() {
           <button
             key={item.key}
             type="button"
-            onClick={() => setPeriod(item.key)}
+            onClick={() => selectPeriod(item.key)}
             className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
               period === item.key
                 ? 'bg-brand-700 text-white shadow-sm'
@@ -255,7 +315,7 @@ export function DashboardPage() {
         ))}
         <button
           type="button"
-          onClick={() => setPeriod('custom')}
+          onClick={() => selectPeriod('custom')}
           className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition ${
             period === 'custom'
               ? 'bg-brand-700 text-white shadow-sm'
@@ -268,7 +328,7 @@ export function DashboardPage() {
       </div>
 
       {period === 'custom' && (
-        <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
             <label className="flex-1 text-sm font-bold text-slate-700">
               Desde
@@ -310,11 +370,13 @@ export function DashboardPage() {
             </button>
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            Puedes consultar hasta 366 días. El mismo rango se aplicará al
-            panel, al reporte PDF y a los datos CSV.
+            Puedes consultar hasta 366 días. El mismo rango se aplicará al panel, al
+            reporte PDF y a los datos CSV.
           </p>
         </section>
       )}
+        </div>
+      </details>
 
       {report.isLoading ? (
         <DashboardLoading />
@@ -344,7 +406,7 @@ export function DashboardPage() {
                 label={item.cardLabel}
                 summary={report.data.sales[item.key]}
                 active={period === item.key}
-                onClick={() => setPeriod(item.key)}
+                onClick={() => selectPeriod(item.key)}
               />
             ))}
           </div>
@@ -400,10 +462,10 @@ export function DashboardPage() {
                 <div className="flex justify-between gap-3">
                   <dt className="text-slate-500">Actualizado</dt>
                   <dd className="font-bold text-slate-800">
-                    {new Date(report.data.generated_at).toLocaleTimeString(
-                      'es-BO',
-                      { hour: '2-digit', minute: '2-digit' },
-                    )}
+                    {new Date(report.data.generated_at).toLocaleTimeString('es-BO', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </dd>
                 </div>
               </dl>
@@ -439,7 +501,92 @@ export function DashboardPage() {
           </div>
         </>
       )}
+
     </>
+  )
+}
+
+function ClientLookup() {
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const clientSearch = searchParams.get('client_search') ?? ''
+  const [expanded, setExpanded] = useState(clientSearch.trim().length >= 2)
+  const deferredClientSearch = useDeferredValue(clientSearch.trim())
+  const clientLookup = useClients(
+    { search: deferredClientSearch, page: 1, ordering: 'name' },
+    deferredClientSearch.length >= 2,
+  )
+  const returnTo = `${location.pathname}${location.search}`
+
+  const updateSearch = (value: string) => {
+    const next = new URLSearchParams(searchParams)
+    if (value) next.set('client_search', value)
+    else next.delete('client_search')
+    setSearchParams(next, { replace: true })
+  }
+
+  return (
+    <details
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      className="group mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 transition hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700">
+          <UsersRound className="size-5" />
+        </div>
+        <h2 className="min-w-0 flex-1 font-bold text-slate-900">
+          Búsqueda de clientes
+        </h2>
+        <ChevronDown className="size-5 shrink-0 text-slate-500 transition-transform duration-200 group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-slate-100 bg-slate-50/40 p-4">
+      <label className="relative block max-w-3xl">
+        <span className="sr-only">Buscar cliente para analizar</span>
+        <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-brand-500" />
+        <input
+          value={clientSearch}
+          onChange={(event) => updateSearch(event.target.value)}
+          placeholder="Escribe nombre, NIT/CI, teléfono, ciudad o actividad…"
+          className="w-full rounded-xl border border-brand-200 bg-white py-3.5 pl-12 pr-4 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
+        />
+      </label>
+      {deferredClientSearch.length < 2 ? (
+        <p className="mt-3 text-xs text-slate-500">Escribe al menos 2 caracteres.</p>
+      ) : clientLookup.isLoading ? (
+        <p className="mt-3 text-sm text-slate-500">Buscando clientes…</p>
+      ) : clientLookup.isError ? (
+        <p className="mt-3 text-sm text-red-600">
+          {getAdminErrorMessage(clientLookup.error, 'No se pudieron buscar los clientes.')}
+        </p>
+      ) : clientLookup.data?.results.length ? (
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {clientLookup.data.results.slice(0, 6).map((client) => (
+            <Link
+              key={client.id}
+              to={`/dashboard/clients/${client.id}`}
+              state={{ returnTo }}
+              className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-brand-300 hover:bg-brand-50/60"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-slate-800">{client.name}</p>
+                <p className="truncate text-xs text-slate-500">
+                  {client.tax_id} · {client.whatsapp} · {client.client_type}
+                </p>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-brand-700">
+                Ver ficha <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
+              </span>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-xl bg-white p-4 text-sm text-slate-500">
+          No se encontraron clientes con esos datos.
+        </p>
+      )}
+      </div>
+    </details>
   )
 }
 
@@ -470,15 +617,11 @@ function SalesCard({
           <p className="mt-2 text-2xl font-black tracking-tight text-slate-900">
             {money(summary.total)}
           </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {quotationCount(summary.count)}
-          </p>
+          <p className="mt-1 text-xs text-slate-500">{quotationCount(summary.count)}</p>
         </div>
         <div
           className={`grid size-10 place-items-center rounded-xl ${
-            active
-              ? 'bg-brand-700 text-white'
-              : 'bg-slate-100 text-slate-600'
+            active ? 'bg-brand-700 text-white' : 'bg-slate-100 text-slate-600'
           }`}
         >
           <ReceiptText className="size-5" />
@@ -515,9 +658,7 @@ function SalesChart({ values }: { values: DashboardSeriesItem[] }) {
               >
                 <div
                   className={`w-full rounded-t-md transition-all ${
-                    hasSales
-                      ? 'bg-brand-500 group-hover:bg-brand-700'
-                      : 'bg-slate-100'
+                    hasSales ? 'bg-brand-500 group-hover:bg-brand-700' : 'bg-slate-100'
                   }`}
                   style={{ height: `${height}%` }}
                 />
@@ -536,9 +677,7 @@ function SalesChart({ values }: { values: DashboardSeriesItem[] }) {
         >
           {values.map((item, index) => (
             <span key={item.date}>
-              {index % labelStep === 0 || index === values.length - 1
-                ? item.label
-                : ''}
+              {index % labelStep === 0 || index === values.length - 1 ? item.label : ''}
             </span>
           ))}
         </div>
@@ -590,16 +729,12 @@ function Ranking({
                 {index + 1}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-slate-800">
-                  {row.title}
-                </p>
+                <p className="truncate text-sm font-bold text-slate-800">{row.title}</p>
                 <p className="truncate text-xs text-slate-500">{row.subtitle}</p>
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-sm font-black text-brand-800">{row.value}</p>
-                {row.total && (
-                  <p className="text-xs text-slate-500">{row.total}</p>
-                )}
+                {row.total && <p className="text-xs text-slate-500">{row.total}</p>}
               </div>
             </li>
           ))}
@@ -618,10 +753,7 @@ function DashboardLoading() {
     <div className="space-y-5" aria-label="Cargando panel">
       <div className="grid gap-4 lg:grid-cols-3">
         {[1, 2, 3].map((item) => (
-          <div
-            key={item}
-            className="h-32 animate-pulse rounded-2xl bg-slate-100"
-          />
+          <div key={item} className="h-32 animate-pulse rounded-2xl bg-slate-100" />
         ))}
       </div>
       <div className="h-80 animate-pulse rounded-2xl bg-slate-100" />
@@ -635,7 +767,5 @@ function formatDate(value: string) {
 }
 
 function reportName(period: DashboardPeriod, range: DashboardRange) {
-  return period === 'custom'
-    ? `${range.start_date}-${range.end_date}`
-    : period
+  return period === 'custom' ? `${range.start_date}-${range.end_date}` : period
 }

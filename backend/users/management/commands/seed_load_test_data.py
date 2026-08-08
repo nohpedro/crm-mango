@@ -58,7 +58,7 @@ class Command(BaseCommand):
             raise CommandError("La cantidad de cotizaciones no puede ser menor a 50.")
 
         actor = (
-            User.objects.filter(username="demo_admin", is_active=True).first()
+            User.objects.filter(username="superadmin", is_active=True).first()
             or User.objects.filter(is_superuser=True, is_active=True).first()
         )
         level, tier = self._prepare_price_level()

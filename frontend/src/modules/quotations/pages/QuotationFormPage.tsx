@@ -1,4 +1,15 @@
-import { CheckCircle2, Clock3, History, Plus, Search, Settings2, Trash2 } from 'lucide-react'
+import {
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  History,
+  Plus,
+  Search,
+  Settings2,
+  Trash2,
+  UserPlus,
+  X,
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -10,8 +21,14 @@ import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { catalogService } from '../../catalog/services/catalog.service'
 import { useProducts } from '../../catalog/hooks/useCatalogQueries'
 import { useClients } from '../../clients/hooks/useClients'
-import type { Client } from '../../clients/types/client.types'
-import { useQuotation, useQuotationMutations, useQuotationTemplates } from '../hooks/useQuotations'
+import { clientService } from '../../clients/services/client.service'
+import type { Client, ClientType } from '../../clients/types/client.types'
+import type { PriceLevel } from '../../catalog/types/catalog.types'
+import {
+  useQuotation,
+  useQuotationMutations,
+  useQuotationTemplates,
+} from '../hooks/useQuotations'
 import type { QuotationStatus, QuotationWriteRequest } from '../types/quotation.types'
 
 type Line = {
@@ -24,9 +41,27 @@ type Line = {
   final: number
   level: string
 }
+type QuickClientForm = {
+  name: string
+  tax_id: string
+  whatsapp: string
+  client_type: string
+  price_level: string
+}
+const emptyQuickClient: QuickClientForm = {
+  name: '',
+  tax_id: '',
+  whatsapp: '',
+  client_type: '',
+  price_level: '',
+}
 const inputClass =
   'mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100'
 const money = (value: number) => `Bs ${value.toFixed(2)}`
+export const localDateValue = (value = new Date()) => {
+  const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 10)
+}
 export const totalQuotationQuantity = (items: Array<{ quantity: number }>) =>
   items.reduce((total, item) => total + item.quantity, 0)
 export const quotationPricingRequests = (
@@ -53,11 +88,9 @@ export function QuotationFormPage() {
     user,
     'quotations.configure_quotation_document',
   )
-  const canManageTemplates = hasPermission(
-    user,
-    'quotations.manage_quotation_templates',
-  )
+  const canManageTemplates = hasPermission(user, 'quotations.manage_quotation_templates')
   const canViewHistory = hasPermission(user, 'quotations.view_quotation')
+  const canCreateClient = hasPermission(user, 'clients.add_client')
   const quotation = useQuotation(id)
   const mutations = useQuotationMutations()
   const templates = useQuotationTemplates(canConfigureDocument || canManageTemplates)
@@ -86,8 +119,16 @@ export function QuotationFormPage() {
   const [validDays, setValidDays] = useState(7)
   const [notes, setNotes] = useState('')
   const [status, setStatus] = useState<QuotationStatus>('pending')
+  const [quotationDate, setQuotationDate] = useState(localDateValue)
   const [template, setTemplate] = useState<number | null>(null)
   const [lines, setLines] = useState<Line[]>([])
+  const [quickClientOpen, setQuickClientOpen] = useState(false)
+  const [quickClient, setQuickClient] = useState<QuickClientForm>(emptyQuickClient)
+  const [quickClientTypes, setQuickClientTypes] = useState<ClientType[]>([])
+  const [quickClientLevels, setQuickClientLevels] = useState<PriceLevel[]>([])
+  const [quickClientLoading, setQuickClientLoading] = useState(false)
+  const [quickClientSaving, setQuickClientSaving] = useState(false)
+  const [quickClientError, setQuickClientError] = useState('')
   const pricingRequest = useRef(0)
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -101,6 +142,7 @@ export function QuotationFormPage() {
     setValidDays(value.valid_days)
     setNotes(value.notes)
     setStatus(value.status)
+    setQuotationDate(value.quotation_date)
     setTemplate(value.template)
     pricingRequest.current += 1
     setLines(
@@ -141,9 +183,7 @@ export function QuotationFormPage() {
   )
   const selectedTemplate =
     template ??
-    (!editing
-      ? activeTemplates.find((item) => item.is_default)?.id ?? null
-      : null)
+    (!editing ? (activeTemplates.find((item) => item.is_default)?.id ?? null) : null)
   const recalculateLines = (nextLines: Line[], client = clientId) => {
     setLines(nextLines)
     const requestId = pricingRequest.current + 1
@@ -162,9 +202,7 @@ export function QuotationFormPage() {
             return {
               ...line,
               normal: Number(price.normal_unit_price),
-              special: price.special_unit_price
-                ? Number(price.special_unit_price)
-                : null,
+              special: price.special_unit_price ? Number(price.special_unit_price) : null,
               final: Number(price.final_unit_price),
               level: price.price_tier?.label ?? price.price_level?.name ?? '',
             }
@@ -184,6 +222,85 @@ export function QuotationFormPage() {
     setAddress(`${client.city_zone}, ${client.department}`)
     setClientSearch('')
     recalculateLines(lines, client.id)
+  }
+  const updateQuickClient = (field: keyof QuickClientForm, value: string) =>
+    setQuickClient((current) => ({ ...current, [field]: value }))
+  const openQuickClient = () => {
+    setQuickClientOpen(true)
+    setQuickClientError('')
+    setQuickClientLoading(true)
+    void Promise.all([
+      clientService.listTypes(),
+      catalogService.listPriceLevels({
+        search: '',
+        category: '',
+        sku: '',
+        is_active: 'true',
+        include_deleted: false,
+        ordering: 'name',
+        page: 1,
+      }),
+    ])
+      .then(([typesResponse, levelsResponse]) => {
+        const activeTypes = typesResponse.results.filter((item) => item.is_active)
+        const activeLevels = levelsResponse.results.filter((item) => item.is_active)
+        const preferredLevel =
+          activeLevels.find(
+            (item) =>
+              item.name.toLocaleLowerCase('es') === 'minorista' ||
+              item.code.toLocaleLowerCase('es') === 'minorista',
+          ) ?? activeLevels[0]
+        setQuickClientTypes(activeTypes)
+        setQuickClientLevels(activeLevels)
+        setQuickClient((current) => ({
+          ...current,
+          client_type: current.client_type || activeTypes[0]?.name || '',
+          price_level: current.price_level || preferredLevel?.id || '',
+        }))
+      })
+      .catch((error: unknown) =>
+        setQuickClientError(
+          getAdminErrorMessage(error, 'No se pudieron cargar las opciones del cliente.'),
+        ),
+      )
+      .finally(() => setQuickClientLoading(false))
+  }
+  const saveQuickClient = () => {
+    const values = Object.fromEntries(
+      Object.entries(quickClient).map(([key, value]) => [key, value.trim()]),
+    ) as QuickClientForm
+    if (
+      !values.name ||
+      !values.tax_id ||
+      !values.whatsapp ||
+      !values.client_type ||
+      !values.price_level
+    ) {
+      setQuickClientError('Completa todos los campos para crear el cliente.')
+      return
+    }
+    setQuickClientSaving(true)
+    setQuickClientError('')
+    void clientService
+      .create({
+        ...values,
+        department: 'No especificado',
+        city_zone: 'No especificado',
+        business_activity: 'No especificado',
+        observations: 'Cliente creado rápidamente desde una cotización.',
+        is_active: true,
+      })
+      .then((created) => {
+        selectClient(created)
+        setQuickClient(emptyQuickClient)
+        setQuickClientOpen(false)
+        void clients.refetch()
+        toast.success('Cliente creado y seleccionado.')
+      })
+      .catch((error: unknown) =>
+        setQuickClientError(getAdminErrorMessage(error, 'No se pudo crear el cliente.')),
+      )
+      .finally(() => setQuickClientSaving(false))
   }
   const addProduct = (product: NonNullable<typeof products.data>['results'][number]) => {
     if (lines.some((line) => line.product === product.id)) {
@@ -225,6 +342,7 @@ export function QuotationFormPage() {
         : {}),
       notes,
       status,
+      quotation_date: quotationDate,
       items: lines.map((line) => ({
         product: line.product,
         quantity: line.quantity,
@@ -258,12 +376,14 @@ export function QuotationFormPage() {
                 Plantillas
               </Link>
             )}
-            {canViewHistory && <Link
-              to="/quotations/history"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700"
-            >
-              <History className="size-4" /> Ver historial
-            </Link>}
+            {canViewHistory && (
+              <Link
+                to="/quotations/history"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700"
+              >
+                <History className="size-4" /> Ver historial
+              </Link>
+            )}
           </div>
         }
       />
@@ -273,11 +393,24 @@ export function QuotationFormPage() {
         <div className="grid gap-5 xl:grid-cols-[1fr_19rem]">
           <main className="space-y-5">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="font-bold">1. Buscar cliente</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Busca por nombre, razón social, NIT/CI, teléfono o cualquier dato
-                registrado.
-              </p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-bold">1. Buscar cliente</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Busca por nombre, razón social, NIT/CI, teléfono o cualquier dato
+                    registrado.
+                  </p>
+                </div>
+                {canCreateClient && (
+                  <button
+                    type="button"
+                    onClick={openQuickClient}
+                    className="inline-flex items-center gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5 text-sm font-bold text-brand-700 transition hover:bg-brand-100"
+                  >
+                    <UserPlus className="size-4" /> Nuevo cliente
+                  </button>
+                )}
+              </div>
               <input
                 value={clientSearch}
                 onChange={(event) => setClientSearch(event.target.value)}
@@ -441,6 +574,21 @@ export function QuotationFormPage() {
           </main>
           <aside className="h-fit rounded-2xl border border-brand-100 bg-brand-50 p-5">
             <h3 className="font-bold text-brand-900">Resumen</h3>
+            <label className="mt-4 block text-sm font-semibold text-brand-900">
+              <span className="inline-flex items-center gap-2">
+                <CalendarDays className="size-4" /> Fecha de la cotización
+              </span>
+              <input
+                type="date"
+                required
+                value={quotationDate}
+                onChange={(event) => setQuotationDate(event.target.value)}
+                className={inputClass}
+              />
+              <span className="mt-1.5 block text-xs font-normal text-brand-900/65">
+                Se muestra en el documento y por defecto corresponde a hoy.
+              </span>
+            </label>
             <fieldset className="mt-4">
               <legend className="text-sm font-semibold text-brand-900">Estado</legend>
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -483,46 +631,48 @@ export function QuotationFormPage() {
               </div>
             </dl>
             {canConfigureDocument ? (
-            <details className="mt-5 rounded-xl border border-brand-200 bg-white/80 p-3">
-              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-bold text-brand-900">
-                <Settings2 className="size-4" /> Configuración del documento
-              </summary>
-              <div className="mt-3 border-t border-brand-100 pt-3">
-                <label className="block text-sm font-semibold text-brand-900">
-                  Plantilla
-                  <select
-                    value={selectedTemplate ?? ''}
-                    onChange={(event) =>
-                      setTemplate(event.target.value ? Number(event.target.value) : null)
-                    }
-                    className={inputClass}
-                  >
-                    <option value="">Selecciona una plantilla guardada</option>
-                    {activeTemplates.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                        {item.is_default ? ' · Predeterminada' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="mt-3 block text-sm font-semibold text-brand-900">
-                  Vigencia (días)
-                  <input
-                    type="number"
-                    min="1"
-                    value={validDays}
-                    onChange={(event) =>
-                      setValidDays(Math.max(1, Number(event.target.value)))
-                    }
-                    className={inputClass}
-                  />
-                </label>
-                <p className="mt-2 text-xs leading-5 text-brand-900/65">
-                  Estas opciones solo afectan la presentación y vigencia del documento.
-                </p>
-              </div>
-            </details>
+              <details className="mt-5 rounded-xl border border-brand-200 bg-white/80 p-3">
+                <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-bold text-brand-900">
+                  <Settings2 className="size-4" /> Configuración del documento
+                </summary>
+                <div className="mt-3 border-t border-brand-100 pt-3">
+                  <label className="block text-sm font-semibold text-brand-900">
+                    Plantilla
+                    <select
+                      value={selectedTemplate ?? ''}
+                      onChange={(event) =>
+                        setTemplate(
+                          event.target.value ? Number(event.target.value) : null,
+                        )
+                      }
+                      className={inputClass}
+                    >
+                      <option value="">Selecciona una plantilla guardada</option>
+                      {activeTemplates.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                          {item.is_default ? ' · Predeterminada' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="mt-3 block text-sm font-semibold text-brand-900">
+                    Vigencia (días)
+                    <input
+                      type="number"
+                      min="1"
+                      value={validDays}
+                      onChange={(event) =>
+                        setValidDays(Math.max(1, Number(event.target.value)))
+                      }
+                      className={inputClass}
+                    />
+                  </label>
+                  <p className="mt-2 text-xs leading-5 text-brand-900/65">
+                    Estas opciones solo afectan la presentación y vigencia del documento.
+                  </p>
+                </div>
+              </details>
             ) : (
               <p className="mt-5 rounded-xl border border-brand-100 bg-white/70 p-3 text-xs leading-5 text-brand-900/70">
                 Se usará automáticamente la plantilla y vigencia predeterminadas.
@@ -548,6 +698,146 @@ export function QuotationFormPage() {
           </aside>
         </div>
       )}
+      {quickClientOpen && canCreateClient && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4">
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="quick-client-title"
+            onSubmit={(event) => {
+              event.preventDefault()
+              saveQuickClient()
+            }}
+            className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="quick-client-title" className="text-lg font-bold text-slate-900">
+                  Crear cliente rápido
+                </h3>
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  Registra los datos necesarios para continuar. Podrás completar su
+                  información después desde Clientes.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Cerrar"
+                onClick={() => setQuickClientOpen(false)}
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <QuickClientField label="Nombre o razón social" fullWidth>
+                <input
+                  autoFocus
+                  value={quickClient.name}
+                  maxLength={200}
+                  onChange={(event) => updateQuickClient('name', event.target.value)}
+                  className={inputClass}
+                />
+              </QuickClientField>
+              <QuickClientField label="NIT/CI">
+                <input
+                  value={quickClient.tax_id}
+                  maxLength={30}
+                  onChange={(event) => updateQuickClient('tax_id', event.target.value)}
+                  className={inputClass}
+                />
+              </QuickClientField>
+              <QuickClientField label="Teléfono o WhatsApp">
+                <input
+                  value={quickClient.whatsapp}
+                  maxLength={30}
+                  onChange={(event) => updateQuickClient('whatsapp', event.target.value)}
+                  className={inputClass}
+                />
+              </QuickClientField>
+              <QuickClientField label="Tipo de cliente">
+                <select
+                  value={quickClient.client_type}
+                  disabled={quickClientLoading}
+                  onChange={(event) =>
+                    updateQuickClient('client_type', event.target.value)
+                  }
+                  className={inputClass}
+                >
+                  <option value="">Selecciona un tipo</option>
+                  {quickClientTypes.map((type) => (
+                    <option key={type.id} value={type.name}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+              </QuickClientField>
+              <QuickClientField label="Nivel de precio">
+                <select
+                  value={quickClient.price_level}
+                  disabled={quickClientLoading}
+                  onChange={(event) =>
+                    updateQuickClient('price_level', event.target.value)
+                  }
+                  className={inputClass}
+                >
+                  <option value="">Selecciona un nivel</option>
+                  {quickClientLevels.map((level) => (
+                    <option key={level.id} value={level.id}>
+                      {level.name}
+                    </option>
+                  ))}
+                </select>
+              </QuickClientField>
+            </div>
+            {quickClientError && (
+              <p
+                role="alert"
+                className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700"
+              >
+                {quickClientError}
+              </p>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={quickClientSaving}
+                onClick={() => setQuickClientOpen(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={quickClientLoading || quickClientSaving}
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              >
+                <UserPlus className="size-4" />
+                {quickClientSaving ? 'Creando…' : 'Crear y seleccionar'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </>
+  )
+}
+
+function QuickClientField({
+  label,
+  fullWidth = false,
+  children,
+}: {
+  label: string
+  fullWidth?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <label
+      className={`block text-sm font-semibold text-slate-700 ${fullWidth ? 'sm:col-span-2' : ''}`}
+    >
+      {label}
+      {children}
+    </label>
   )
 }

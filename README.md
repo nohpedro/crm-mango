@@ -47,8 +47,8 @@ http://localhost:8000/admin/
 
 Al iniciar el backend con Docker se cargan de forma idempotente el almacén
 `Principal`, los niveles `Mayorista`, `Minorista` y `Preferencial`, los roles
-del sistema y los usuarios `admin`, `cajero`, `inventarios` y
-`configuraciones`.
+del sistema y los cuatro usuarios principales: `cajero`, `jefe`,
+`configuraciones` y `superadmin`.
 
 La contraseña inicial de las cuentas nuevas es `Demo12345!`. También se puede
 ejecutar manualmente:

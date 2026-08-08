@@ -38,8 +38,10 @@ la red puedan encontrarla. El iniciador mostrará una advertencia si no coincide
 ## Requisitos de la computadora
 
 - Windows 10 u 11 de 64 bits.
-- Python 3.12 o superior, con la opción `py launcher` habilitada.
-- Node.js 22 LTS o superior.
+- Una cuenta de Windows con permiso de administrador durante la configuración.
+- Conexión a Internet durante la primera instalación.
+- Windows Package Manager (`winget`), incluido normalmente con **Instalador de
+  aplicaciones** de Microsoft Store.
 - Al menos 4 GB de memoria RAM y 2 GB de espacio disponible.
 - La red de Windows debe estar configurada como **Privada**.
 
@@ -47,13 +49,28 @@ No se requiere Docker, PostgreSQL, Nginx ni Apache. Esta instalación utiliza la
 base SQLite persistente ubicada en `backend/db.sqlite3` y Waitress como servidor
 de producción local.
 
+El botón de configuración comprueba e instala automáticamente, cuando sea
+necesario:
+
+- Python 3.12.
+- Node.js LTS.
+- Dependencias Python del servidor.
+- Dependencias y compilación de la interfaz web.
+
+No es necesario instalar Git, Visual Studio Code ni herramientas para bases de
+datos. Si `winget` no está disponible, instala **Instalador de aplicaciones**
+desde Microsoft Store y ejecuta nuevamente el configurador.
+
 ## Primera configuración
 
-1. Copia toda la carpeta del proyecto a la computadora que será el servidor.
+1. Copia toda la carpeta del proyecto a una ubicación permanente de la
+   computadora servidor, por ejemplo `C:\CRM-IDESEM`. Evita ejecutarla desde un
+   archivo ZIP, una memoria USB o una carpeta sincronizada por OneDrive.
 2. Haz doble clic en `Configurar CRM IDESEM.bat`.
 3. Acepta el permiso de administrador. Solo se utiliza para permitir el puerto
    8000 en el firewall de redes privadas.
-4. Espera hasta que aparezca el mensaje **Configuración terminada correctamente**.
+4. Mantén la conexión a Internet y espera hasta que aparezca el mensaje
+   **Configuración terminada correctamente**.
 
 El configurador crea el entorno virtual, instala las dependencias, compila la
 interfaz, aplica las migraciones y carga únicamente las semillas idempotentes del
@@ -65,6 +82,10 @@ Haz doble clic en `Iniciar CRM IDESEM.bat`. Este único archivo inicia
 automáticamente el backend y el frontend. El frontend se sirve desde el mismo
 host y puerto que la API; no se debe ejecutar `npm run dev` ni abrir el puerto
 5173 en producción.
+
+Después de completar la primera configuración no se necesita Internet para
+trabajar dentro de la red local. La ventana de **Iniciar CRM IDESEM** debe
+permanecer abierta mientras se utiliza el sistema.
 
 Se abrirá el navegador de la computadora principal y el CRM quedará disponible
 para los demás equipos usando la URL mostrada en la consola.

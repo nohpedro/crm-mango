@@ -56,3 +56,70 @@ export interface DashboardData {
   top_clients: TopClient[]
   definition: string
 }
+
+export interface ClientAnalyticsSummary {
+  count: number
+  quantity: number
+  total: string
+}
+
+export interface ClientAnalyticsHistoryItem {
+  id: number
+  number: string
+  status: Exclude<DashboardStatus, 'all'>
+  created_at: string
+  quotation_date: string
+  products_count: number
+  quantity: number
+  total: string
+}
+
+export interface ClientAnalyticsData {
+  generated_at: string
+  client: {
+    id: string
+    name: string
+    tax_id: string
+    whatsapp: string
+    department: string
+    city_zone: string
+    client_type: string
+    price_level: { id: string; name: string; code: string }
+    business_activity: string
+  }
+  status: DashboardStatus
+  range: { start: string | null; end: string | null }
+  lifetime: Record<DashboardStatus, ClientAnalyticsSummary>
+  selected: ClientAnalyticsSummary
+  frequency: { label: string; average_days: number | null }
+  last_purchase_at: string | null
+  last_activity_at: string | null
+  monthly: Array<{
+    month: string
+    label: string
+    count: number
+    quantity: number
+    total: string
+  }>
+  top_products: Array<{
+    product_id: string | null
+    sku: string
+    name: string
+    quotation_count: number
+    quantity: number
+    total: string
+  }>
+  history: {
+    count: number
+    page: number
+    page_size: number
+    total_pages: number
+    results: ClientAnalyticsHistoryItem[]
+  }
+}
+
+export interface ClientAnalyticsParams extends DashboardRange {
+  status: DashboardStatus
+  page: number
+  page_size?: number
+}

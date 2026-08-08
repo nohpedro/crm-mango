@@ -1,5 +1,10 @@
 import { requestHandler } from '../../auth/services/auth.service'
-import type { ImportMode, ImportResult, TransferResource } from '../types/transfer.types'
+import type {
+  ImportOptions,
+  ImportMode,
+  ImportResult,
+  TransferResource,
+} from '../types/transfer.types'
 
 const endpoint = (resource: TransferResource) =>
   resource === 'clients'
@@ -22,20 +27,44 @@ export const transferService = {
     requestHandler.download(`${endpoint(resource)}${resourcePath(resource)}export/`, {
       params: { ...filters, file_format: 'xlsx' },
     }),
-  importFile: (resource: TransferResource, file: File, mode: ImportMode) => {
+  importFile: (
+    resource: TransferResource,
+    file: File,
+    mode: ImportMode,
+    options: ImportOptions = {},
+  ) => {
     const formData = new FormData()
     formData.append('file', file, file.name)
     formData.append('mode', mode)
+    if (resource === 'clients') {
+      formData.append(
+        'create_missing_client_types',
+        String(Boolean(options.createMissingClientTypes)),
+      )
+      formData.append(
+        'create_missing_price_levels',
+        String(Boolean(options.createMissingPriceLevels)),
+      )
+    }
+    if (resource === 'products') {
+      formData.append(
+        'create_missing_categories',
+        String(Boolean(options.createMissingCategories)),
+      )
+    }
     return requestHandler.post<ImportResult, FormData>(
       `${endpoint(resource)}${resourcePath(resource)}import/`,
       formData,
     )
   },
-  downloadReport: (resource: TransferResource, errors: unknown[]) =>
-    requestHandler.postDownload(
-      `${endpoint(resource)}transfer/report/?resource=${resource}&file_format=xlsx`,
+  downloadReport: (resource: TransferResource, errors: unknown[]) => {
+    const reportPath =
+      resource === 'clients' || resource === 'products' ? 'report/' : 'transfer/report/'
+    return requestHandler.postDownload(
+      `${endpoint(resource)}${reportPath}?resource=${resource}&file_format=xlsx`,
       {
         errors,
       },
-    ),
+    )
+  },
 }

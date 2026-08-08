@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Check, Search } from 'lucide-react'
+import { Check, LockKeyhole, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -11,6 +11,12 @@ import { getAdminErrorMessage, getFieldErrors } from '../components/AdminError'
 import { usePermissions, useRole, useRoleMutations } from '../hooks/useAdminQueries'
 import { roleSchema, type RoleFormValues } from '../schemas/admin.schemas'
 import { getFriendlyPermission, type FriendlyPermission } from '../utils/permissionCatalog'
+import {
+  dependenciesFor,
+  includeDependencies,
+  permissionCode,
+  removeWithDependents,
+} from '../utils/permissionDependencies'
 
 const emptyValues: RoleFormValues = {
   name: '',
@@ -26,6 +32,14 @@ type PermissionGroup = {
   resourceDescription: string
   order: number
   permissions: FriendlyPermission[]
+}
+
+const permissionOrder = (permission: FriendlyPermission) => {
+  if (permission.codename.startsWith('view_')) return 0
+  if (permission.codename.startsWith('add_')) return 1
+  if (permission.codename.startsWith('change_')) return 2
+  if (permission.codename.startsWith('delete_')) return 3
+  return 4
 }
 
 export function RoleFormPage() {
@@ -51,16 +65,34 @@ export function RoleFormPage() {
   })
   const selectedPermissions = useWatch({ control, name: 'permissions' }) ?? []
 
+  const allFriendlyPermissions = useMemo(
+    () =>
+      permissionsQuery.data
+        ?.map(getFriendlyPermission)
+        .filter((permission): permission is FriendlyPermission => Boolean(permission)) ?? [],
+    [permissionsQuery.data],
+  )
+  const permissionByCode = useMemo(
+    () =>
+      new Map(
+        allFriendlyPermissions.map((permission) => [permissionCode(permission), permission]),
+      ),
+    [allFriendlyPermissions],
+  )
+
   useEffect(() => {
-    if (roleQuery.data)
+    if (roleQuery.data && allFriendlyPermissions.length)
       reset({
         name: roleQuery.data.name,
         code: roleQuery.data.code,
         description: roleQuery.data.description,
-        permissions: roleQuery.data.permissions,
+        permissions: includeDependencies(
+          roleQuery.data.permissions,
+          allFriendlyPermissions,
+        ),
         is_active: roleQuery.data.is_active,
       })
-  }, [reset, roleQuery.data])
+  }, [allFriendlyPermissions, reset, roleQuery.data])
 
   const permissionGroups = useMemo(() => {
     const groups = new Map<string, PermissionGroup>()
@@ -89,7 +121,9 @@ export function RoleFormPage() {
     return [...groups.values()]
       .map((group) => ({
         ...group,
-        permissions: group.permissions.sort((a, b) => a.actionLabel.localeCompare(b.actionLabel)),
+        permissions: group.permissions.sort(
+          (a, b) => permissionOrder(a) - permissionOrder(b),
+        ),
       }))
       .sort((a, b) => a.order - b.order)
   }, [permissionsQuery.data, search])
@@ -105,12 +139,22 @@ export function RoleFormPage() {
   const setPermissions = (next: number[]) =>
     setValue('permissions', [...new Set(next)], { shouldDirty: true, shouldValidate: true })
 
-  const togglePermission = (permissionId: number) => {
-    setPermissions(
-      selectedPermissions.includes(permissionId)
-        ? selectedPermissions.filter((idValue) => idValue !== permissionId)
-        : [...selectedPermissions, permissionId],
-    )
+  const togglePermission = (permission: FriendlyPermission) => {
+    if (selectedPermissions.includes(permission.id)) {
+      setPermissions(
+        removeWithDependents(
+          selectedPermissions,
+          permission.id,
+          allFriendlyPermissions,
+        ),
+      )
+      return
+    }
+    const missing = dependenciesFor(permission).filter((code) => {
+      const required = permissionByCode.get(code)
+      return required && !selectedPermissions.includes(required.id)
+    })
+    if (!missing.length) setPermissions([...selectedPermissions, permission.id])
   }
 
   const toggleResource = (permissions: FriendlyPermission[]) => {
@@ -118,8 +162,15 @@ export function RoleFormPage() {
     const allSelected = ids.every((permissionId) => selectedPermissions.includes(permissionId))
     setPermissions(
       allSelected
-        ? selectedPermissions.filter((permissionId) => !ids.includes(permissionId))
-        : [...selectedPermissions, ...ids],
+        ? ids.reduce(
+            (current, permissionId) =>
+              removeWithDependents(current, permissionId, allFriendlyPermissions),
+            selectedPermissions,
+          )
+        : includeDependencies(
+            [...selectedPermissions, ...ids],
+            allFriendlyPermissions,
+          ),
     )
   }
 
@@ -200,14 +251,14 @@ export function RoleFormPage() {
         <fieldset className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <legend className="text-base font-bold text-slate-900">Accesos del rol</legend>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            Marca las acciones que esta persona necesita realizar. Las opciones del menú se
-            mostrarán solo cuando tenga acceso para verlas.
+            Empieza habilitando “Ver”. Las demás acciones se desbloquearán únicamente
+            cuando el rol tenga todos los accesos necesarios.
           </p>
           <div className="mt-4 rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm text-brand-950">
             <p className="font-bold">{selectedPermissions.length} acciones seleccionadas</p>
             <p className="mt-1 text-brand-900/75">
-              “Ver” permite consultar información; “Crear”, “Editar” y “Eliminar” habilitan
-              las acciones correspondientes.
+              “Ver” permite consultar información y desbloquea las acciones que dependen
+              de ella. Al quitarlo, también se retiran automáticamente esos accesos.
             </p>
             <p className="mt-2 text-brand-900/75">
               Para elaborar cotizaciones, asigna además “Ver” en Clientes y Productos.
@@ -232,6 +283,21 @@ export function RoleFormPage() {
                     const allSelected = group.permissions.every((permission) =>
                       selectedPermissions.includes(permission.id),
                     )
+                    const lockedRequirements = [
+                      ...new Map(
+                        group.permissions
+                          .flatMap(dependenciesFor)
+                          .map((code) => permissionByCode.get(code))
+                          .filter(
+                            (required): required is FriendlyPermission =>
+                              Boolean(
+                                required &&
+                                  !selectedPermissions.includes(required.id),
+                              ),
+                          )
+                          .map((required) => [permissionCode(required), required]),
+                      ).values(),
+                    ]
                     return (
                       <section key={group.resourceLabel} className="rounded-xl border border-slate-200 p-4">
                         <div className="flex items-start justify-between gap-3">
@@ -252,24 +318,56 @@ export function RoleFormPage() {
                         <div className="mt-4 flex flex-wrap gap-2">
                           {group.permissions.map((permission) => {
                             const selected = selectedPermissions.includes(permission.id)
+                            const missingDependencies = dependenciesFor(permission)
+                              .map((code) => permissionByCode.get(code))
+                              .filter(
+                                (required): required is FriendlyPermission =>
+                                  Boolean(
+                                    required &&
+                                      !selectedPermissions.includes(required.id),
+                                  ),
+                              )
+                            const locked = !selected && missingDependencies.length > 0
+                            const requirement = missingDependencies
+                              .map(
+                                (required) =>
+                                  `${required.actionLabel} ${required.resourceLabel}`,
+                              )
+                              .join(', ')
                             return (
                               <button
                                 key={permission.id}
                                 type="button"
-                                onClick={() => togglePermission(permission.id)}
+                                onClick={() => togglePermission(permission)}
+                                disabled={locked}
+                                title={locked ? `Primero habilita: ${requirement}` : undefined}
                                 aria-pressed={selected}
                                 className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition ${
                                   selected
                                     ? 'border-brand-600 bg-brand-600 text-white'
+                                    : locked
+                                      ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400'
                                     : 'border-slate-200 text-slate-600 hover:border-brand-300 hover:bg-brand-50'
                                 }`}
                               >
                                 {selected && <Check className="size-3.5" />}
+                                {locked && <LockKeyhole className="size-3.5" />}
                                 {permission.actionLabel}
                               </button>
                             )
                           })}
                         </div>
+                        {lockedRequirements.length > 0 && (
+                          <p className="mt-3 flex items-start gap-1.5 text-xs leading-5 text-slate-500">
+                            <LockKeyhole className="mt-0.5 size-3.5 shrink-0" />
+                            Para desbloquear: {lockedRequirements
+                              .map(
+                                (required) =>
+                                  `${required.actionLabel} ${required.resourceLabel}`,
+                              )
+                              .join(', ')}.
+                          </p>
+                        )}
                       </section>
                     )
                   })}
