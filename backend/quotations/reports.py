@@ -212,6 +212,45 @@ def dashboard_data(
     }
 
 
+def dashboard_day_data(day, quotation_status="all"):
+    if quotation_status not in STATUS_LABELS:
+        raise ValueError("El estado debe ser all, pending o paid.")
+    try:
+        selected_day = date.fromisoformat(str(day))
+    except (TypeError, ValueError) as error:
+        raise ValueError("Selecciona una fecha válida con el formato AAAA-MM-DD.") from error
+    quotations = Quotation.objects.filter(quotation_date=selected_day)
+    if quotation_status != "all":
+        quotations = quotations.filter(status=quotation_status)
+    rows = list(
+        quotations.annotate(
+            products_count=Count("items", distinct=True),
+            units=Sum("items__quantity"),
+            total_amount=Sum(_money_expression()),
+        ).order_by("-created_at", "-id")
+    )
+    return {
+        "date": selected_day.isoformat(),
+        "label": selected_day.strftime("%d/%m/%Y"),
+        "status": quotation_status,
+        "count": len(rows),
+        "total": f"{sum((row.total_amount or Decimal('0.00') for row in rows), Decimal('0.00')):.2f}",
+        "results": [
+            {
+                "id": row.id,
+                "number": row.number,
+                "client_name": row.client_name,
+                "client_tax_id": row.client_tax_id,
+                "status": row.status,
+                "products_count": row.products_count,
+                "units": row.units or 0,
+                "total": f"{(row.total_amount or Decimal('0.00')):.2f}",
+            }
+            for row in rows
+        ],
+    }
+
+
 def report_csv(
     period="month",
     now=None,
@@ -238,6 +277,7 @@ def report_csv(
             "NIT/CI",
             "SKU",
             "Producto",
+            "Números de serie",
             "Cantidad",
             "Precio normal",
             "Precio aplicado",
@@ -255,6 +295,7 @@ def report_csv(
                 item.quotation.client_tax_id,
                 item.sku,
                 item.name,
+                ", ".join(item.serial_numbers),
                 item.quantity,
                 f"{item.normal_unit_price:.2f}",
                 f"{item.unit_price:.2f}",

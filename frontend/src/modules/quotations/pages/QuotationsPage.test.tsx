@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useAuthStore } from '../../../store/authStore'
 import { server } from '../../../test/server'
@@ -40,6 +40,8 @@ const quotation = (status: QuotationStatus): Quotation => ({
 })
 
 describe('QuotationsPage', () => {
+  afterEach(cleanup)
+
   beforeEach(() => {
     toastMocks.success.mockClear()
     toastMocks.error.mockClear()
@@ -58,6 +60,7 @@ describe('QuotationsPage', () => {
         permissions: [
           'quotations.view_quotation',
           'quotations.change_quotation_status',
+          'clients.view_client',
         ],
         role: null,
         last_login: null,
@@ -107,11 +110,56 @@ describe('QuotationsPage', () => {
 
     await waitFor(() => expect(receivedStatus).toBe('pending'))
     await waitFor(() => expect(statusSelect).toHaveValue('pending'))
-    expect(toastMocks.success).toHaveBeenCalledWith(
-      'Cotización marcada como pendiente.',
+    expect(toastMocks.success).toHaveBeenCalledWith('Cotización marcada como pendiente.')
+    expect(toastMocks.success).not.toHaveBeenCalledWith('Cotización marcada como pagada.')
+  })
+
+  it('filtra el historial por un cliente seleccionado', async () => {
+    const user = userEvent.setup()
+    let selectedClient = ''
+    server.use(
+      http.get('http://localhost:8000/api/v1/clients/', () =>
+        HttpResponse.json({
+          count: 1,
+          next: null,
+          previous: null,
+          results: [
+            {
+              id: 'client-1',
+              name: 'Constructora Andina',
+              tax_id: '10203040',
+              whatsapp: '70000000',
+              department: 'La Paz',
+              city_zone: 'Centro',
+              client_type: 'Empresa',
+              price_level: null,
+              business_activity: 'Construcción',
+              observations: '',
+              is_active: true,
+              created_at: '2026-07-31T12:00:00Z',
+              updated_at: '2026-07-31T12:00:00Z',
+            },
+          ],
+        }),
+      ),
+      http.get('http://localhost:8000/api/v1/quotations/', ({ request }) => {
+        selectedClient = new URL(request.url).searchParams.get('client') ?? ''
+        return HttpResponse.json({ count: 0, next: null, previous: null, results: [] })
+      }),
     )
-    expect(toastMocks.success).not.toHaveBeenCalledWith(
-      'Cotización marcada como pagada.',
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <QuotationsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
     )
+
+    await user.type(screen.getByLabelText('Filtrar por cliente'), 'Andina')
+    await user.click(await screen.findByRole('button', { name: /Constructora Andina/i }))
+
+    await waitFor(() => expect(selectedClient).toBe('client-1'))
+    expect(screen.getByText('Constructora Andina')).toBeInTheDocument()
   })
 })

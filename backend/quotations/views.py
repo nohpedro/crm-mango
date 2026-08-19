@@ -10,6 +10,7 @@ from .models import Quotation, QuotationTemplate, QuotationTemplateImage
 from .pdf import quotation_pdf
 from .reports import (
     dashboard_data,
+    dashboard_day_data,
     report_csv as build_report_csv,
     report_pdf as build_report_pdf,
 )
@@ -61,7 +62,7 @@ class QuotationViewSet(viewsets.ModelViewSet):
     ordering = ["-quotation_date", "-created_at"]
 
     def get_permissions(self):
-        if self.action in {"dashboard", "report_pdf", "report_csv"}:
+        if self.action in {"dashboard", "dashboard_day", "report_pdf", "report_csv"}:
             self.required_permission = "quotations.view_dashboard"
         elif (
             self.action == "partial_update"
@@ -95,6 +96,17 @@ class QuotationViewSet(viewsets.ModelViewSet):
                 request.query_params.get("period", "month"),
                 start_date=request.query_params.get("start_date"),
                 end_date=request.query_params.get("end_date"),
+                quotation_status=request.query_params.get("status", "all"),
+            )
+        except ValueError as error:
+            return Response({"detail": str(error)}, status=400)
+        return Response(data)
+
+    @action(detail=False, methods=["get"], url_path="dashboard-day")
+    def dashboard_day(self, request):
+        try:
+            data = dashboard_day_data(
+                request.query_params.get("date"),
                 quotation_status=request.query_params.get("status", "all"),
             )
         except ValueError as error:

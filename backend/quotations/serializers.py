@@ -96,22 +96,69 @@ class QuotationTemplateSerializer(serializers.ModelSerializer):
 class QuotationItemSerializer(serializers.ModelSerializer):
     total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
     savings = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    serial_numbers = serializers.ListField(
+        child=serializers.CharField(
+            max_length=120,
+            trim_whitespace=True,
+            allow_blank=False,
+            error_messages={
+                "blank": "Escribe el número de serie.",
+                "max_length": "El número de serie no puede superar 120 caracteres.",
+            },
+        ),
+        required=True,
+        allow_empty=False,
+        error_messages={
+            "required": "Registra un número de serie por cada unidad.",
+            "empty": "Registra un número de serie por cada unidad.",
+            "not_a_list": "Los números de serie deben enviarse como una lista.",
+        },
+    )
+    manual_unit_price = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0"),
+        required=False,
+        allow_null=True,
+        write_only=True,
+        error_messages={
+            "invalid": "Ingresa un precio válido.",
+            "max_digits": "El precio no puede superar 12 dígitos.",
+            "max_decimal_places": "El precio puede tener como máximo 2 decimales.",
+            "min_value": "El precio no puede ser negativo.",
+        },
+    )
 
     class Meta:
         model = QuotationItem
         fields = [
-            "id", "product", "sku", "name", "quantity", "normal_unit_price", "special_unit_price",
-            "applied_price_level", "additional_discount_percent", "unit_price", "savings", "total",
+            "id", "product", "sku", "name", "quantity", "serial_numbers", "normal_unit_price", "special_unit_price",
+            "applied_price_level", "additional_discount_percent", "unit_price", "manual_unit_price",
+            "price_manually_set", "savings", "total",
         ]
         read_only_fields = [
             "id", "sku", "name", "normal_unit_price", "special_unit_price", "applied_price_level",
-            "unit_price", "savings", "total",
+            "unit_price", "price_manually_set", "savings", "total",
         ]
 
     def validate(self, attrs):
         product = attrs.get("product")
         if product and (not product.is_active or product.deleted_at):
             raise serializers.ValidationError({"product": "El producto seleccionado no está disponible."})
+        quantity = attrs.get("quantity", getattr(self.instance, "quantity", None))
+        serial_numbers = attrs.get(
+            "serial_numbers",
+            getattr(self.instance, "serial_numbers", []),
+        )
+        if quantity is not None and len(serial_numbers) != quantity:
+            raise serializers.ValidationError({
+                "serial_numbers": (
+                    f"Registra exactamente {quantity} número(s) de serie, "
+                    "uno por cada unidad."
+                )
+            })
+        normalized = [serial.strip() for serial in serial_numbers]
+        attrs["serial_numbers"] = normalized
         return attrs
 
 
@@ -154,6 +201,11 @@ class QuotationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "template": "No tienes permiso para cambiar la configuración del documento."
             })
+        items = attrs.get("items", [])
+        if any("manual_unit_price" in item for item in items) and not self._can_change_item_price():
+            raise serializers.ValidationError({
+                "items": "No tienes permiso para editar el precio unitario de los productos."
+            })
         client = attrs.get("client", getattr(self.instance, "client", None))
         if "client" in attrs and client and not attrs.get("client_name"):
             attrs.update({
@@ -185,6 +237,11 @@ class QuotationSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         items = validated_data.pop("items", None)
+        existing_manual_prices = {
+            item.product_id: item.unit_price
+            for item in instance.items.all()
+            if item.product_id and item.price_manually_set
+        }
         if "template" in validated_data:
             instance.template_snapshot = self._template_snapshot(validated_data["template"])
         for attr, value in validated_data.items():
@@ -192,6 +249,13 @@ class QuotationSerializer(serializers.ModelSerializer):
         instance.save()
         if items is not None:
             total_quantity = sum(item["quantity"] for item in items)
+            for item in items:
+                product_id = item["product"].pk
+                if (
+                    "manual_unit_price" not in item
+                    and product_id in existing_manual_prices
+                ):
+                    item["manual_unit_price"] = existing_manual_prices[product_id]
             instance.items.all().delete()
             for item in items:
                 create_priced_item(instance, item, total_quantity)
@@ -209,6 +273,18 @@ class QuotationSerializer(serializers.ModelSerializer):
             for permission in (
                 "quotations.configure_quotation_document",
                 "quotations.manage_quotation_templates",
+            )
+        )
+
+    def _can_change_item_price(self):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        return bool(
+            user
+            and user.is_authenticated
+            and HasRoleModelPermission._has_permission(
+                user,
+                "quotations.change_quotation_item_price",
             )
         )
 
@@ -231,6 +307,8 @@ class QuotationSerializer(serializers.ModelSerializer):
 
 def create_priced_item(quotation, data, total_quantity):
     product, quantity = data["product"], data["quantity"]
+    serial_numbers = data["serial_numbers"]
+    manual_unit_price = data.pop("manual_unit_price", None)
     additional_discount = Decimal("0")
     normal_price = product.normal_unit_price
     level = quotation.client.price_level if quotation.client_id else None
@@ -241,10 +319,13 @@ def create_priced_item(quotation, data, total_quantity):
     ).order_by("-minimum_quantity").first() if level else None
     configured = ProductPrice.objects.filter(product=product, price_tier=tier, is_active=True).order_by("-updated_at").first() if tier and tier.minimum_quantity > 1 else None
     special_price = configured.unit_price if configured else None
-    final_price = special_price if special_price is not None else normal_price
+    automatic_price = special_price if special_price is not None else normal_price
+    final_price = manual_unit_price if manual_unit_price is not None else automatic_price
     return QuotationItem.objects.create(
-        quotation=quotation, product=product, sku=product.sku, name=product.name, quantity=quantity,
+        quotation=quotation, product=product, sku=product.sku, name=product.name,
+        quantity=quantity, serial_numbers=serial_numbers,
         normal_unit_price=normal_price, special_unit_price=special_price,
         applied_price_level=tier.label if tier else "",
         additional_discount_percent=additional_discount, unit_price=final_price,
+        price_manually_set=manual_unit_price is not None,
     )

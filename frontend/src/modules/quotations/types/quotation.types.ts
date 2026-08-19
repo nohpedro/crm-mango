@@ -88,11 +88,13 @@ export interface QuotationItem {
   sku: string
   name: string
   quantity: number
+  serial_numbers: string[]
   normal_unit_price: string
   special_unit_price: string | null
   applied_price_level: string
   additional_discount_percent: string
   unit_price: string
+  price_manually_set: boolean
   savings: string
   total: string
 }
@@ -130,7 +132,12 @@ export interface QuotationWriteRequest {
   notes: string
   status: QuotationStatus
   quotation_date: string
-  items: Array<{ product: string; quantity: number }>
+  items: Array<{
+    product: string
+    quantity: number
+    serial_numbers: string[]
+    manual_unit_price?: number | null
+  }>
 }
 
 export type PaginatedQuotations = PaginatedResponse<Quotation>

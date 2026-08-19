@@ -57,6 +57,24 @@ export interface DashboardData {
   definition: string
 }
 
+export interface DashboardDayData {
+  date: string
+  label: string
+  status: DashboardStatus
+  count: number
+  total: string
+  results: Array<{
+    id: number
+    number: string
+    client_name: string
+    client_tax_id: string
+    status: Exclude<DashboardStatus, 'all'>
+    products_count: number
+    units: number
+    total: string
+  }>
+}
+
 export interface ClientAnalyticsSummary {
   count: number
   quantity: number

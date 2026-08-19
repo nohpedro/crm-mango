@@ -84,6 +84,7 @@ ROLE_DEFINITIONS = (
             "quotations.change_quotation",
             "quotations.delete_quotation",
             "quotations.change_quotation_status",
+            "quotations.change_quotation_item_price",
             "quotations.configure_quotation_document",
             "quotations.manage_quotation_templates",
         ),

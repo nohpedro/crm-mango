@@ -83,6 +83,68 @@ describe('DashboardPage', () => {
     expect(screen.getByRole('button', { name: /descargar datos csv/i })).toBeEnabled()
   })
 
+  it('desglosa las cotizaciones al seleccionar una barra del gráfico', async () => {
+    const user = userEvent.setup()
+    let requestedStatus = ''
+    server.use(
+      http.get('http://localhost:8000/api/v1/quotations/dashboard/', () =>
+        HttpResponse.json(dashboardResponse),
+      ),
+      http.get(
+        'http://localhost:8000/api/v1/quotations/dashboard-day/',
+        ({ request }) => {
+          requestedStatus = new URL(request.url).searchParams.get('status') ?? ''
+          return HttpResponse.json({
+            date: '2026-07-25',
+            label: '25/07/2026',
+            status: 'all',
+            count: 2,
+            total: '2400.00',
+            results: [
+              {
+                id: 60,
+                number: 'COT-000060',
+                client_name: 'Constructora Andina',
+                client_tax_id: '10203040',
+                status: 'paid',
+                products_count: 3,
+                units: 5,
+                total: '1400.00',
+              },
+              {
+                id: 61,
+                number: 'COT-000061',
+                client_name: 'Comercial Norte',
+                client_tax_id: '554433',
+                status: 'pending',
+                products_count: 2,
+                units: 4,
+                total: '1000.00',
+              },
+            ],
+          })
+        },
+      ),
+    )
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Ver cotizaciones del 25/07' }),
+    )
+
+    expect(await screen.findByText('Cotizaciones del 25/07/2026')).toBeInTheDocument()
+    expect(screen.getByText('COT-000060')).toBeInTheDocument()
+    expect(screen.getByText('Comercial Norte')).toBeInTheDocument()
+    expect(requestedStatus).toBe('all')
+  })
+
   it('explica el permiso requerido cuando el rol no puede ver cotizaciones', () => {
     useAuthStore.setState({
       status: 'authenticated',
@@ -150,11 +212,15 @@ describe('DashboardPage', () => {
   })
 
   it('filtra el panel y los reportes por estado de cotizaciÃ³n', async () => {
-    let lastUrl = ''
+    const requestedStatuses: string[] = []
     server.use(
       http.get('http://localhost:8000/api/v1/quotations/dashboard/', ({ request }) => {
-        lastUrl = request.url
-        return HttpResponse.json(dashboardResponse)
+        const selectedStatus = new URL(request.url).searchParams.get('status') ?? 'all'
+        requestedStatuses.push(selectedStatus)
+        return HttpResponse.json({
+          ...dashboardResponse,
+          status: { key: selectedStatus, label: selectedStatus },
+        })
       }),
     )
     const client = new QueryClient({
@@ -174,8 +240,12 @@ describe('DashboardPage', () => {
     await user.click(screen.getByRole('button', { name: 'Pagadas' }))
 
     await waitFor(() => {
-      expect(new URL(lastUrl).searchParams.get('status')).toBe('paid')
+      expect(requestedStatuses.at(-1)).toBe('paid')
     })
+    await user.click(screen.getByRole('button', { name: 'Todas' }))
+    await waitFor(() => expect(requestedStatuses.at(-1)).toBe('all'))
+    await user.click(screen.getByRole('button', { name: 'Pendientes' }))
+    await waitFor(() => expect(requestedStatuses.at(-1)).toBe('pending'))
   })
 
   it('busca clientes desde el panel sin cargar la lista antes de escribir', async () => {
@@ -253,9 +323,7 @@ describe('DashboardPage', () => {
     render(
       <QueryClientProvider client={client}>
         <MemoryRouter
-          initialEntries={[
-            '/dashboard?client_search=Andina&period=week&status=paid',
-          ]}
+          initialEntries={['/dashboard?client_search=Andina&period=week&status=paid']}
         >
           <DashboardPage />
         </MemoryRouter>

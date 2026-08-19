@@ -19,6 +19,7 @@ from .filters import ClientFilter
 from .models import Client, ClientType
 from .serializers import ClientReadSerializer, ClientTypeSerializer, ClientWriteSerializer
 from .analytics import client_analytics
+from .reports import build_client_report_csv, build_client_report_pdf
 
 CLIENT_HEADERS = [
     "Nombre o razón social",
@@ -67,7 +68,7 @@ class ClientViewSet(viewsets.ModelViewSet):
     ordering = ["name"]
 
     def get_permissions(self):
-        if self.action == "analytics":
+        if self.action in {"analytics", "analytics_report_pdf", "analytics_report_csv"}:
             self.required_all_permissions = (
                 "clients.view_client",
                 "quotations.view_quotation",
@@ -91,6 +92,38 @@ class ClientViewSet(viewsets.ModelViewSet):
         except ValueError as error:
             return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(data)
+
+    @action(detail=True, methods=["get"], url_path="analytics-report-pdf")
+    def analytics_report_pdf(self, request, *args, **kwargs):
+        client = self.get_object()
+        try:
+            content = build_client_report_pdf(
+                client,
+                start_date=request.query_params.get("start_date"),
+                end_date=request.query_params.get("end_date"),
+                quotation_status=request.query_params.get("status", "all"),
+            )
+        except ValueError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        response = HttpResponse(content, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="reporte-cliente-{client.pk}.pdf"'
+        return response
+
+    @action(detail=True, methods=["get"], url_path="analytics-report-csv")
+    def analytics_report_csv(self, request, *args, **kwargs):
+        client = self.get_object()
+        try:
+            content = build_client_report_csv(
+                client,
+                start_date=request.query_params.get("start_date"),
+                end_date=request.query_params.get("end_date"),
+                quotation_status=request.query_params.get("status", "all"),
+            )
+        except ValueError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        response = HttpResponse(content, content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="productos-cliente-{client.pk}.csv"'
+        return response
 
 
 class ClientTemplateView(APIView):

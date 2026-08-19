@@ -371,6 +371,10 @@ class Command(BaseCommand):
                         {
                             "product": str(product.id),
                             "quantity": quantity,
+                            "serial_numbers": [
+                                f"{DATA_PREFIX}-{index:04d}-{offset:02d}-{unit:03d}"
+                                for unit in range(1, quantity + 1)
+                            ],
                         }
                     )
                 serializer = QuotationSerializer(

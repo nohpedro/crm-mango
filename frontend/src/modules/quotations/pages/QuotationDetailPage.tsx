@@ -144,6 +144,12 @@ export function QuotationDetailPage() {
                   <td className="py-3">
                     <p className="font-semibold text-slate-800">{item.name}</p>
                     <p className="font-mono text-xs text-slate-500">{item.sku}</p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      <span className="font-semibold">N.º de serie:</span>{' '}
+                      <span className="font-mono">
+                        {item.serial_numbers.join(', ') || 'No registrado'}
+                      </span>
+                    </p>
                   </td>
                   <td className="py-3 text-right">{item.quantity}</td>
                   <td className="py-3 text-right">

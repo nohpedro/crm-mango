@@ -25,6 +25,7 @@ PERMISSION_DEPENDENCIES = {
         "products.view_product",
     },
     "quotations.change_quotation_status": {"quotations.view_quotation"},
+    "quotations.change_quotation_item_price": {"quotations.change_quotation"},
 }
 
 RESOURCE_LABELS = {
@@ -53,6 +54,7 @@ ACTION_LABELS = {
 
 CUSTOM_ACTION_LABELS = {
     "change_quotation_status": "Cambiar estado de",
+    "change_quotation_item_price": "Editar precios de",
     "configure_quotation_document": "Configurar documento de",
     "manage_quotation_templates": "Administrar plantillas de",
 }

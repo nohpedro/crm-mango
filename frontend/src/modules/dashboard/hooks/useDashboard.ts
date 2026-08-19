@@ -18,7 +18,21 @@ export function useDashboard(
     queryKey: ['dashboard', period, range.start_date, range.end_date, status],
     queryFn: () => dashboardService.get(period, range, status),
     enabled,
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
+}
+
+export function useDashboardDay(
+  date: string | null,
+  status: DashboardStatus = 'all',
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['dashboard-day', date, status],
+    queryFn: () => dashboardService.getDay(date ?? '', status),
+    enabled: enabled && Boolean(date),
+    staleTime: 0,
   })
 }
 

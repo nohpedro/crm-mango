@@ -24,6 +24,7 @@ const permissionDependencies: Record<string, string[]> = {
     'products.view_product',
   ],
   'quotations.change_quotation_status': ['quotations.view_quotation'],
+  'quotations.change_quotation_item_price': ['quotations.change_quotation'],
 }
 
 export const permissionCode = (permission: FriendlyPermission) =>
@@ -46,7 +47,9 @@ export function includeDependencies(
   permissionIds: number[],
   permissions: FriendlyPermission[],
 ) {
-  const byCode = new Map(permissions.map((permission) => [permissionCode(permission), permission]))
+  const byCode = new Map(
+    permissions.map((permission) => [permissionCode(permission), permission]),
+  )
   const selected = new Set(permissionIds)
   let changed = true
   while (changed) {

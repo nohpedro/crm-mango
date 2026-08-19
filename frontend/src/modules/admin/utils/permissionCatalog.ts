@@ -114,6 +114,7 @@ const customPermissionLabels: Record<string, string> = {
   configure_quotation_document: 'Configurar documento',
   manage_quotation_templates: 'Administrar plantillas',
   change_quotation_status: 'Cambiar estado',
+  change_quotation_item_price: 'Editar precios unitarios',
   view_dashboard: 'Ver',
 }
 

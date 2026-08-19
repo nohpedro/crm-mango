@@ -10,6 +10,7 @@ import {
   Search,
   ShoppingBag,
   UsersRound,
+  X,
 } from 'lucide-react'
 import { useDeferredValue, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
@@ -20,10 +21,11 @@ import { useAuthStore } from '../../../store/authStore'
 import { hasPermission } from '../../../utils/permissions'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { useClients } from '../../clients/hooks/useClients'
-import { useDashboard } from '../hooks/useDashboard'
+import { useDashboard, useDashboardDay } from '../hooks/useDashboard'
 import { dashboardService } from '../services/dashboard.service'
 import type {
   DashboardPeriod,
+  DashboardDayData,
   DashboardRange,
   DashboardSeriesItem,
   DashboardStatus,
@@ -73,11 +75,15 @@ export function DashboardPage() {
     canViewClients && hasPermission(user, 'quotations.view_quotation')
   const [searchParams, setSearchParams] = useSearchParams()
   const periodParam = searchParams.get('period')
-  const period: DashboardPeriod = ['day', 'week', 'month', 'custom'].includes(periodParam ?? '')
+  const period: DashboardPeriod = ['day', 'week', 'month', 'custom'].includes(
+    periodParam ?? '',
+  )
     ? (periodParam as DashboardPeriod)
     : 'month'
   const statusParam = searchParams.get('status')
-  const statusFilter: DashboardStatus = ['all', 'pending', 'paid'].includes(statusParam ?? '')
+  const statusFilter: DashboardStatus = ['all', 'pending', 'paid'].includes(
+    statusParam ?? '',
+  )
     ? (statusParam as DashboardStatus)
     : 'all'
   const fallbackRange = initialRange()
@@ -87,9 +93,16 @@ export function DashboardPage() {
   }
   const [rangeDraft, setRangeDraft] = useState(appliedRange)
   const [downloading, setDownloading] = useState<'pdf' | 'csv' | null>(null)
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const report = useDashboard(period, appliedRange, statusFilter, canViewReports)
+  const dayBreakdown = useDashboardDay(
+    selectedDay,
+    statusFilter,
+    canViewReports && Boolean(selectedDay),
+  )
 
   const updateFilters = (changes: Record<string, string | null>) => {
+    setSelectedDay(null)
     const next = new URLSearchParams(searchParams)
     Object.entries(changes).forEach(([key, value]) => {
       if (value) next.set(key, value)
@@ -210,7 +223,7 @@ export function DashboardPage() {
               ·{' '}
               {period === 'custom'
                 ? 'Fechas personalizadas'
-                : periods.find((item) => item.key === period)?.label ?? 'Este mes'}
+                : (periods.find((item) => item.key === period)?.label ?? 'Este mes')}
             </p>
           </div>
           <span className="hidden text-xs font-semibold text-slate-500 sm:inline">
@@ -220,161 +233,161 @@ export function DashboardPage() {
         </summary>
 
         <div className="border-t border-slate-100 bg-slate-50/40 p-4">
-      <section className="mb-4 flex flex-col gap-4 rounded-2xl border border-brand-100 bg-brand-50/60 p-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="font-bold text-brand-900">¿Qué información se muestra?</p>
-          <p className="mt-1 text-sm text-brand-800">
-            Filtra las cotizaciones por estado y periodo. El mismo filtro se aplicará al
-            panel, al reporte PDF y a los datos CSV.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={Boolean(downloading)}
-            onClick={() => void downloadReport('pdf')}
-            className="inline-flex items-center gap-2 rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {downloading === 'pdf' ? (
-              <RefreshCw className="size-4 animate-spin" />
-            ) : (
-              <FileText className="size-4" />
-            )}
-            Generar reporte PDF
-          </button>
-          <button
-            type="button"
-            disabled={Boolean(downloading)}
-            onClick={() => void downloadReport('csv')}
-            className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-bold text-emerald-800 disabled:opacity-50"
-          >
-            {downloading === 'csv' ? (
-              <RefreshCw className="size-4 animate-spin" />
-            ) : (
-              <FileSpreadsheet className="size-4" />
-            )}
-            Descargar datos CSV
-          </button>
-        </div>
-      </section>
+          <section className="mb-4 flex flex-col gap-4 rounded-2xl border border-brand-100 bg-brand-50/60 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="font-bold text-brand-900">¿Qué información se muestra?</p>
+              <p className="mt-1 text-sm text-brand-800">
+                Filtra las cotizaciones por estado y periodo. El mismo filtro se aplicará
+                al panel, al reporte PDF y a los datos CSV.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={Boolean(downloading)}
+                onClick={() => void downloadReport('pdf')}
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {downloading === 'pdf' ? (
+                  <RefreshCw className="size-4 animate-spin" />
+                ) : (
+                  <FileText className="size-4" />
+                )}
+                Generar reporte PDF
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(downloading)}
+                onClick={() => void downloadReport('csv')}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-bold text-emerald-800 disabled:opacity-50"
+              >
+                {downloading === 'csv' ? (
+                  <RefreshCw className="size-4 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="size-4" />
+                )}
+                Descargar datos CSV
+              </button>
+            </div>
+          </section>
 
-      <section className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
-        <span className="text-sm font-bold text-slate-700">Estado:</span>
-        {(
-          [
-            ['all', 'Todas'],
-            ['pending', 'Pendientes'],
-            ['paid', 'Pagadas'],
-          ] as Array<[DashboardStatus, string]>
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => updateFilters({ status: key })}
-            className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
-              statusFilter === key
-                ? key === 'paid'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : key === 'pending'
-                    ? 'bg-amber-500 text-white shadow-sm'
-                    : 'bg-brand-700 text-white shadow-sm'
-                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-        <span className="text-xs text-slate-500 sm:ml-auto">
-          Mostrando:{' '}
-          {statusFilter === 'all'
-            ? 'todos los estados'
-            : statusFilter === 'paid'
-              ? 'solo pagadas'
-              : 'solo pendientes'}
-        </span>
-      </section>
+          <section className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
+            <span className="text-sm font-bold text-slate-700">Estado:</span>
+            {(
+              [
+                ['all', 'Todas'],
+                ['pending', 'Pendientes'],
+                ['paid', 'Pagadas'],
+              ] as Array<[DashboardStatus, string]>
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => updateFilters({ status: key })}
+                className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                  statusFilter === key
+                    ? key === 'paid'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : key === 'pending'
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'bg-brand-700 text-white shadow-sm'
+                    : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="text-xs text-slate-500 sm:ml-auto">
+              Mostrando:{' '}
+              {statusFilter === 'all'
+                ? 'todos los estados'
+                : statusFilter === 'paid'
+                  ? 'solo pagadas'
+                  : 'solo pendientes'}
+            </span>
+          </section>
 
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <span className="mr-1 inline-flex items-center gap-2 text-sm font-bold text-slate-700">
-          <CalendarDays className="size-4" />
-          Periodo del reporte:
-        </span>
-        {periods.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => selectPeriod(item.key)}
-            className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
-              period === item.key
-                ? 'bg-brand-700 text-white shadow-sm'
-                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => selectPeriod('custom')}
-          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition ${
-            period === 'custom'
-              ? 'bg-brand-700 text-white shadow-sm'
-              : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          <CalendarRange className="size-4" />
-          Elegir fechas
-        </button>
-      </div>
-
-      {period === 'custom' && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
-            <label className="flex-1 text-sm font-bold text-slate-700">
-              Desde
-              <input
-                type="date"
-                value={rangeDraft.start_date}
-                max={rangeDraft.end_date}
-                onChange={(event) =>
-                  setRangeDraft((current) => ({
-                    ...current,
-                    start_date: event.target.value,
-                  }))
-                }
-                className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-              />
-            </label>
-            <label className="flex-1 text-sm font-bold text-slate-700">
-              Hasta
-              <input
-                type="date"
-                value={rangeDraft.end_date}
-                min={rangeDraft.start_date}
-                onChange={(event) =>
-                  setRangeDraft((current) => ({
-                    ...current,
-                    end_date: event.target.value,
-                  }))
-                }
-                className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-              />
-            </label>
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            <span className="mr-1 inline-flex items-center gap-2 text-sm font-bold text-slate-700">
+              <CalendarDays className="size-4" />
+              Periodo del reporte:
+            </span>
+            {periods.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => selectPeriod(item.key)}
+                className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                  period === item.key
+                    ? 'bg-brand-700 text-white shadow-sm'
+                    : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
             <button
               type="button"
-              onClick={applyCustomRange}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-800"
+              onClick={() => selectPeriod('custom')}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition ${
+                period === 'custom'
+                  ? 'bg-brand-700 text-white shadow-sm'
+                  : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
             >
-              <CalendarDays className="size-4" />
-              Mostrar este rango
+              <CalendarRange className="size-4" />
+              Elegir fechas
             </button>
           </div>
-          <p className="mt-3 text-xs text-slate-500">
-            Puedes consultar hasta 366 días. El mismo rango se aplicará al panel, al
-            reporte PDF y a los datos CSV.
-          </p>
-        </section>
-      )}
+
+          {period === 'custom' && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+                <label className="flex-1 text-sm font-bold text-slate-700">
+                  Desde
+                  <input
+                    type="date"
+                    value={rangeDraft.start_date}
+                    max={rangeDraft.end_date}
+                    onChange={(event) =>
+                      setRangeDraft((current) => ({
+                        ...current,
+                        start_date: event.target.value,
+                      }))
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                  />
+                </label>
+                <label className="flex-1 text-sm font-bold text-slate-700">
+                  Hasta
+                  <input
+                    type="date"
+                    value={rangeDraft.end_date}
+                    min={rangeDraft.start_date}
+                    onChange={(event) =>
+                      setRangeDraft((current) => ({
+                        ...current,
+                        end_date: event.target.value,
+                      }))
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={applyCustomRange}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-800"
+                >
+                  <CalendarDays className="size-4" />
+                  Mostrar este rango
+                </button>
+              </div>
+              <p className="mt-3 text-xs text-slate-500">
+                Puedes consultar hasta 366 días. El mismo rango se aplicará al panel, al
+                reporte PDF y a los datos CSV.
+              </p>
+            </section>
+          )}
         </div>
       </details>
 
@@ -431,7 +444,20 @@ export function DashboardPage() {
                   </p>
                 </div>
               </div>
-              <SalesChart values={report.data.series} />
+              <SalesChart
+                values={report.data.series}
+                selectedDate={selectedDay}
+                onSelect={setSelectedDay}
+              />
+              {selectedDay && (
+                <DayBreakdown
+                  data={dayBreakdown.data}
+                  loading={dayBreakdown.isLoading}
+                  error={dayBreakdown.error}
+                  onRetry={() => void dayBreakdown.refetch()}
+                  onClose={() => setSelectedDay(null)}
+                />
+              )}
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -501,7 +527,6 @@ export function DashboardPage() {
           </div>
         </>
       )}
-
     </>
   )
 }
@@ -535,56 +560,60 @@ function ClientLookup() {
         <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700">
           <UsersRound className="size-5" />
         </div>
-        <h2 className="min-w-0 flex-1 font-bold text-slate-900">
-          Búsqueda de clientes
-        </h2>
+        <h2 className="min-w-0 flex-1 font-bold text-slate-900">Búsqueda de clientes</h2>
         <ChevronDown className="size-5 shrink-0 text-slate-500 transition-transform duration-200 group-open:rotate-180" />
       </summary>
       <div className="border-t border-slate-100 bg-slate-50/40 p-4">
-      <label className="relative block max-w-3xl">
-        <span className="sr-only">Buscar cliente para analizar</span>
-        <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-brand-500" />
-        <input
-          value={clientSearch}
-          onChange={(event) => updateSearch(event.target.value)}
-          placeholder="Escribe nombre, NIT/CI, teléfono, ciudad o actividad…"
-          className="w-full rounded-xl border border-brand-200 bg-white py-3.5 pl-12 pr-4 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
-        />
-      </label>
-      {deferredClientSearch.length < 2 ? (
-        <p className="mt-3 text-xs text-slate-500">Escribe al menos 2 caracteres.</p>
-      ) : clientLookup.isLoading ? (
-        <p className="mt-3 text-sm text-slate-500">Buscando clientes…</p>
-      ) : clientLookup.isError ? (
-        <p className="mt-3 text-sm text-red-600">
-          {getAdminErrorMessage(clientLookup.error, 'No se pudieron buscar los clientes.')}
-        </p>
-      ) : clientLookup.data?.results.length ? (
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          {clientLookup.data.results.slice(0, 6).map((client) => (
-            <Link
-              key={client.id}
-              to={`/dashboard/clients/${client.id}`}
-              state={{ returnTo }}
-              className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-brand-300 hover:bg-brand-50/60"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-slate-800">{client.name}</p>
-                <p className="truncate text-xs text-slate-500">
-                  {client.tax_id} · {client.whatsapp} · {client.client_type}
-                </p>
-              </div>
-              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-brand-700">
-                Ver ficha <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
-              </span>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-4 rounded-xl bg-white p-4 text-sm text-slate-500">
-          No se encontraron clientes con esos datos.
-        </p>
-      )}
+        <label className="relative block max-w-3xl">
+          <span className="sr-only">Buscar cliente para analizar</span>
+          <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-brand-500" />
+          <input
+            value={clientSearch}
+            onChange={(event) => updateSearch(event.target.value)}
+            placeholder="Escribe nombre, NIT/CI, teléfono, ciudad o actividad…"
+            className="w-full rounded-xl border border-brand-200 bg-white py-3.5 pl-12 pr-4 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
+          />
+        </label>
+        {deferredClientSearch.length < 2 ? (
+          <p className="mt-3 text-xs text-slate-500">Escribe al menos 2 caracteres.</p>
+        ) : clientLookup.isLoading ? (
+          <p className="mt-3 text-sm text-slate-500">Buscando clientes…</p>
+        ) : clientLookup.isError ? (
+          <p className="mt-3 text-sm text-red-600">
+            {getAdminErrorMessage(
+              clientLookup.error,
+              'No se pudieron buscar los clientes.',
+            )}
+          </p>
+        ) : clientLookup.data?.results.length ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {clientLookup.data.results.slice(0, 6).map((client) => (
+              <Link
+                key={client.id}
+                to={`/dashboard/clients/${client.id}`}
+                state={{ returnTo }}
+                className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-brand-300 hover:bg-brand-50/60"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-slate-800">
+                    {client.name}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    {client.tax_id} · {client.whatsapp} · {client.client_type}
+                  </p>
+                </div>
+                <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-brand-700">
+                  Ver ficha{' '}
+                  <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
+                </span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-xl bg-white p-4 text-sm text-slate-500">
+            No se encontraron clientes con esos datos.
+          </p>
+        )}
       </div>
     </details>
   )
@@ -631,7 +660,15 @@ function SalesCard({
   )
 }
 
-function SalesChart({ values }: { values: DashboardSeriesItem[] }) {
+function SalesChart({
+  values,
+  selectedDate,
+  onSelect,
+}: {
+  values: DashboardSeriesItem[]
+  selectedDate: string | null
+  onSelect: (date: string) => void
+}) {
   const max = Math.max(...values.map((item) => Number(item.total)), 0)
   const hasSales = max > 0
   const labelStep = values.length > 14 ? 5 : values.length > 8 ? 2 : 1
@@ -651,21 +688,31 @@ function SalesChart({ values }: { values: DashboardSeriesItem[] }) {
           {values.map((item) => {
             const height = max ? Math.max(4, (Number(item.total) / max) * 100) : 2
             return (
-              <div
+              <button
+                type="button"
                 key={item.date}
-                className="group relative flex h-full items-end"
+                disabled={!item.count}
+                onClick={() => onSelect(item.date)}
+                aria-label={`Ver cotizaciones del ${item.label}`}
+                className={`group relative flex h-full items-end rounded-t-md outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  item.count ? 'cursor-pointer' : 'cursor-default'
+                }`}
                 title={`${item.label}: ${money(item.total)} · ${quotationCount(item.count)}`}
               >
                 <div
                   className={`w-full rounded-t-md transition-all ${
-                    hasSales ? 'bg-brand-500 group-hover:bg-brand-700' : 'bg-slate-100'
+                    selectedDate === item.date
+                      ? 'bg-emerald-500 ring-2 ring-emerald-200'
+                      : hasSales && item.count
+                        ? 'bg-brand-500 group-hover:bg-brand-700'
+                        : 'bg-slate-100'
                   }`}
                   style={{ height: `${height}%` }}
                 />
                 <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-bold text-white shadow-lg group-hover:block">
-                  {money(item.total)}
+                  {quotationCount(item.count)} · {money(item.total)}
                 </div>
-              </div>
+              </button>
             )
           })}
         </div>
@@ -688,6 +735,118 @@ function SalesChart({ values }: { values: DashboardSeriesItem[] }) {
         </p>
       )}
     </div>
+  )
+}
+
+function DayBreakdown({
+  data,
+  loading,
+  error,
+  onRetry,
+  onClose,
+}: {
+  data: DashboardDayData | undefined
+  loading: boolean
+  error: unknown
+  onRetry: () => void
+  onClose: () => void
+}) {
+  return (
+    <section className="mt-5 overflow-hidden rounded-xl border border-brand-100 bg-brand-50/40">
+      <div className="flex items-start justify-between gap-3 border-b border-brand-100 px-4 py-3">
+        <div>
+          <h3 className="text-sm font-black text-brand-950">
+            {data ? `Cotizaciones del ${data.label}` : 'Detalle del día'}
+          </h3>
+          {data && (
+            <p className="mt-0.5 text-xs text-brand-800/70">
+              {quotationCount(data.count)} · {money(data.total)}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          aria-label="Cerrar desglose"
+          onClick={onClose}
+          className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-800"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+      {loading ? (
+        <div className="space-y-2 p-4">
+          {[1, 2].map((item) => (
+            <div key={item} className="h-14 animate-pulse rounded-lg bg-white" />
+          ))}
+        </div>
+      ) : error || !data ? (
+        <div className="p-4 text-sm text-red-700">
+          <p>{getAdminErrorMessage(error, 'No se pudo cargar el desglose del día.')}</p>
+          <button type="button" onClick={onRetry} className="mt-2 font-bold underline">
+            Reintentar
+          </button>
+        </div>
+      ) : data.results.length ? (
+        <div className="max-h-80 overflow-auto">
+          <table className="min-w-full text-xs">
+            <thead className="sticky top-0 bg-white text-left uppercase text-slate-500 shadow-sm">
+              <tr>
+                <th className="px-3 py-2.5">Cotización</th>
+                <th className="px-3 py-2.5">Cliente</th>
+                <th className="px-3 py-2.5">Estado</th>
+                <th className="px-3 py-2.5 text-right">Productos</th>
+                <th className="px-3 py-2.5 text-right">Unidades</th>
+                <th className="px-3 py-2.5 text-right">Total</th>
+                <th className="px-3 py-2.5" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-brand-100">
+              {data.results.map((quotation) => (
+                <tr key={quotation.id} className="bg-white/70 hover:bg-white">
+                  <td className="px-3 py-3 font-mono font-bold text-brand-700">
+                    {quotation.number}
+                  </td>
+                  <td className="px-3 py-3">
+                    <p className="font-bold text-slate-800">{quotation.client_name}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {quotation.client_tax_id || 'Sin NIT/CI'}
+                    </p>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span
+                      className={`rounded-full px-2 py-1 font-bold ${
+                        quotation.status === 'paid'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {quotation.status === 'paid' ? 'Pagada' : 'Pendiente'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-right">{quotation.products_count}</td>
+                  <td className="px-3 py-3 text-right">{quotation.units}</td>
+                  <td className="px-3 py-3 text-right font-black text-slate-900">
+                    {money(quotation.total)}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    <Link
+                      to={`/quotations/${quotation.id}`}
+                      className="font-bold text-brand-700 hover:underline"
+                    >
+                      Ver
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="p-4 text-sm text-slate-500">
+          No hay cotizaciones para este día y estado.
+        </p>
+      )}
+    </section>
   )
 }
 

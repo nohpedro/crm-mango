@@ -97,6 +97,10 @@ class Quotation(models.Model):
                 "Puede cambiar el estado de una cotización",
             ),
             (
+                "change_quotation_item_price",
+                "Puede editar el precio unitario de los productos en una cotización",
+            ),
+            (
                 "view_dashboard",
                 "Puede ver el panel principal y sus reportes",
             ),
@@ -121,11 +125,13 @@ class QuotationItem(models.Model):
     sku = models.CharField(max_length=80, blank=True)
     name = models.CharField(max_length=200)
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    serial_numbers = models.JSONField(default=list, blank=True)
     normal_unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     special_unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     applied_price_level = models.CharField(max_length=100, blank=True)
     additional_discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    price_manually_set = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["id"]

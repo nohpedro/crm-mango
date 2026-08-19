@@ -4,6 +4,8 @@ import {
   CheckCircle2,
   Clock3,
   Edit,
+  FileSpreadsheet,
+  FileText,
   PackageSearch,
   ReceiptText,
   RefreshCw,
@@ -12,12 +14,14 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
 
 import { PageHeading } from '../../../components/common/PageHeading'
 import { useAuthStore } from '../../../store/authStore'
 import { hasPermission } from '../../../utils/permissions'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { useClientAnalytics } from '../hooks/useDashboard'
+import { dashboardService } from '../services/dashboard.service'
 import type { DashboardRange, DashboardStatus } from '../types/dashboard.types'
 
 type PeriodKey = '3m' | '6m' | '12m' | 'all' | 'custom'
@@ -60,7 +64,9 @@ export function ClientAnalyticsPage() {
   const user = useAuthStore((state) => state.user)
   const canEditClient = hasPermission(user, 'clients.change_client')
   const periodParam = searchParams.get('period')
-  const period: PeriodKey = ['3m', '6m', '12m', 'all', 'custom'].includes(periodParam ?? '')
+  const period: PeriodKey = ['3m', '6m', '12m', 'all', 'custom'].includes(
+    periodParam ?? '',
+  )
     ? (periodParam as PeriodKey)
     : '12m'
   const statusParam = searchParams.get('status')
@@ -80,6 +86,7 @@ export function ClientAnalyticsPage() {
   const [rangeDraft, setRangeDraft] = useState<Required<DashboardRange>>(() =>
     period === 'custom' ? (range as Required<DashboardRange>) : rangeForMonths(12),
   )
+  const [downloading, setDownloading] = useState<'pdf' | 'csv' | null>(null)
   const origin = (location.state as { returnTo?: string } | null)?.returnTo
   const currentLocation = `${location.pathname}${location.search}`
   const analytics = useClientAnalytics(id, {
@@ -88,6 +95,38 @@ export function ClientAnalyticsPage() {
     page,
     page_size: 10,
   })
+
+  const downloadClientReport = async (format: 'pdf' | 'csv') => {
+    if (!id) return
+    setDownloading(format)
+    try {
+      const params = { ...range, status }
+      const blob =
+        format === 'pdf'
+          ? await dashboardService.downloadClientPdf(id, params)
+          : await dashboardService.downloadClientCsv(id, params)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download =
+        format === 'pdf'
+          ? `reporte-cliente-${analytics.data?.client.tax_id || id}.pdf`
+          : `productos-cliente-${analytics.data?.client.tax_id || id}.csv`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+      toast.success(
+        format === 'pdf'
+          ? 'Reporte del cliente descargado.'
+          : 'Lista de productos descargada.',
+      )
+    } catch (error) {
+      toast.error(getAdminErrorMessage(error, 'No se pudo descargar el reporte.'))
+    } finally {
+      setDownloading(null)
+    }
+  }
 
   const choosePeriod = (nextPeriod: PeriodKey) => {
     const next = new URLSearchParams(searchParams)
@@ -132,6 +171,36 @@ export function ClientAnalyticsPage() {
         description="Compras pagadas, cotizaciones pendientes y comportamiento comercial del cliente."
         action={
           <div className="flex flex-wrap gap-2">
+            {analytics.data && (
+              <>
+                <button
+                  type="button"
+                  disabled={Boolean(downloading)}
+                  onClick={() => void downloadClientReport('pdf')}
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand-700 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  {downloading === 'pdf' ? (
+                    <RefreshCw className="size-4 animate-spin" />
+                  ) : (
+                    <FileText className="size-4" />
+                  )}
+                  Reporte PDF
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(downloading)}
+                  onClick={() => void downloadClientReport('csv')}
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold text-emerald-700 disabled:opacity-50"
+                >
+                  {downloading === 'csv' ? (
+                    <RefreshCw className="size-4 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="size-4" />
+                  )}
+                  Productos CSV
+                </button>
+              </>
+            )}
             {canEditClient && analytics.data && (
               <Link
                 to={`/clients/${analytics.data.client.id}/edit`}

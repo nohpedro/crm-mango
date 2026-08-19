@@ -85,7 +85,12 @@ class QuotationApiTests(APITestCase):
             "valid_days": 7,
             "notes": "Entrega coordinada.",
             "status": "pending",
-            "items": [{"product": self.product.id, "quantity": 2, "unit_price": "250.50"}],
+            "items": [{
+                "product": self.product.id,
+                "quantity": 2,
+                "serial_numbers": ["CAL-10-S001", "CAL-10-S002"],
+                "unit_price": "250.50",
+            }],
         }
 
     def test_hidden_company_section_removes_standard_header_from_pdf(self):
@@ -232,6 +237,9 @@ class QuotationApiTests(APITestCase):
             {
                 "product": self.product.id,
                 "quantity": index,
+                "serial_numbers": [
+                    f"ROLL-{index:02d}-{unit:02d}" for unit in range(1, index + 1)
+                ],
                 "unit_price": "20.00",
             }
             for index in range(1, 31)
@@ -274,6 +282,9 @@ class QuotationApiTests(APITestCase):
             {
                 "product": self.product.id,
                 "quantity": index,
+                "serial_numbers": [
+                    f"PAGE-{index:02d}-{unit:02d}" for unit in range(1, index + 1)
+                ],
                 "unit_price": "20.00",
             }
             for index in range(1, 6)
@@ -339,8 +350,10 @@ class QuotationApiTests(APITestCase):
                 "quantity": 1,
                 "unit_price": "20.00",
             }
-            for _ in range(18)
+            for index in range(18)
         ]
+        for index, item in enumerate(payload["items"], start=1):
+            item["serial_numbers"] = [f"LONG-{index:02d}"]
         response = self.client.post("/api/v1/quotations/", payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         quotation = Quotation.objects.prefetch_related("items").get(pk=response.data["id"])
@@ -397,6 +410,87 @@ class QuotationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["status"], Quotation.Status.PENDING)
+
+    def test_saves_one_serial_number_per_quoted_unit(self):
+        response = self.client.post(
+            "/api/v1/quotations/", self.payload(), format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data["items"][0]["serial_numbers"],
+            ["CAL-10-S001", "CAL-10-S002"],
+        )
+        saved = Quotation.objects.get(pk=response.data["id"]).items.get()
+        self.assertEqual(saved.serial_numbers, ["CAL-10-S001", "CAL-10-S002"])
+
+    def test_requires_all_serial_numbers_but_allows_repeated_values(self):
+        missing = self.payload()
+        missing["items"][0]["serial_numbers"] = ["ONLY-ONE"]
+        missing_response = self.client.post(
+            "/api/v1/quotations/", missing, format="json"
+        )
+
+        repeated = self.payload()
+        repeated["items"][0]["serial_numbers"] = ["SAME-SERIAL", "same-serial"]
+        repeated_response = self.client.post(
+            "/api/v1/quotations/", repeated, format="json"
+        )
+
+        self.assertEqual(missing_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "exactamente 2",
+            str(missing_response.data["items"][0]["serial_numbers"]),
+        )
+        self.assertEqual(repeated_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            repeated_response.data["items"][0]["serial_numbers"],
+            ["SAME-SERIAL", "same-serial"],
+        )
+
+    def test_manual_unit_price_requires_its_specific_permission(self):
+        payload = self.payload()
+        payload["items"][0]["manual_unit_price"] = "12.50"
+
+        rejected = self.client.post("/api/v1/quotations/", payload, format="json")
+
+        self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("permiso", str(rejected.data["items"]))
+
+        self.user.role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="quotations",
+                codename="change_quotation_item_price",
+            )
+        )
+        accepted = self.client.post("/api/v1/quotations/", payload, format="json")
+
+        self.assertEqual(accepted.status_code, status.HTTP_201_CREATED, accepted.data)
+        self.assertEqual(accepted.data["items"][0]["unit_price"], "12.50")
+        self.assertTrue(accepted.data["items"][0]["price_manually_set"])
+        self.assertEqual(accepted.data["total"], "25.00")
+
+    def test_manual_unit_price_can_be_restored_to_the_automatic_price(self):
+        self.user.role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="quotations",
+                codename="change_quotation_item_price",
+            )
+        )
+        payload = self.payload()
+        payload["items"][0]["manual_unit_price"] = "12.50"
+        created = self.client.post("/api/v1/quotations/", payload, format="json")
+        payload["items"][0]["manual_unit_price"] = None
+
+        updated = self.client.put(
+            f"/api/v1/quotations/{created.data['id']}/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(updated.status_code, status.HTTP_200_OK, updated.data)
+        self.assertEqual(updated.data["items"][0]["unit_price"], "20.00")
+        self.assertFalse(updated.data["items"][0]["price_manually_set"])
 
     def test_quotation_date_defaults_to_today_and_accepts_a_selected_date(self):
         automatic = self.client.post(
@@ -501,19 +595,45 @@ class QuotationApiTests(APITestCase):
         )
         self.assertEqual(paid.status_code, status.HTTP_201_CREATED)
 
-        response = self.client.get(
+        paid_response = self.client.get(
             "/api/v1/quotations/dashboard/?period=month&status=paid"
         )
+        pending_response = self.client.get(
+            "/api/v1/quotations/dashboard/?period=month&status=pending"
+        )
+        all_response = self.client.get(
+            "/api/v1/quotations/dashboard/?period=month&status=all"
+        )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["sales"]["day"]["count"], 1)
-        self.assertEqual(response.data["sales"]["month"]["total"], "40.00")
-        self.assertEqual(response.data["top_products"][0]["sku"], "CAL-10")
-        self.assertEqual(response.data["top_products"][0]["quantity"], 2)
+        self.assertEqual(paid_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(pending_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(all_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(paid_response.data["sales"]["day"]["count"], 1)
+        self.assertEqual(pending_response.data["sales"]["day"]["count"], 1)
+        self.assertEqual(all_response.data["sales"]["day"]["count"], 2)
+        self.assertEqual(paid_response.data["sales"]["month"]["total"], "40.00")
+        self.assertEqual(pending_response.data["sales"]["month"]["total"], "40.00")
+        self.assertEqual(all_response.data["sales"]["month"]["total"], "80.00")
+        self.assertEqual(paid_response.data["top_products"][0]["sku"], "CAL-10")
+        self.assertEqual(paid_response.data["top_products"][0]["quantity"], 2)
         self.assertEqual(
-            response.data["top_clients"][0]["client_name"],
+            paid_response.data["top_clients"][0]["client_name"],
             self.customer.name,
         )
+
+        selected_date = timezone.localdate().isoformat()
+        day_all = self.client.get(
+            f"/api/v1/quotations/dashboard-day/?date={selected_date}&status=all"
+        )
+        day_paid = self.client.get(
+            f"/api/v1/quotations/dashboard-day/?date={selected_date}&status=paid"
+        )
+        self.assertEqual(day_all.status_code, status.HTTP_200_OK)
+        self.assertEqual(day_all.data["count"], 2)
+        self.assertEqual(day_all.data["total"], "80.00")
+        self.assertEqual(len(day_all.data["results"]), 2)
+        self.assertEqual(day_paid.data["count"], 1)
+        self.assertEqual(day_paid.data["results"][0]["status"], Quotation.Status.PAID)
 
     def test_dashboard_uses_its_own_permission(self):
         role = Role.objects.create(name="Solo panel", code="DASHBOARD_ONLY")
@@ -626,6 +746,7 @@ class QuotationApiTests(APITestCase):
         )
         payload = self.payload()
         payload["items"][0]["quantity"] = 3
+        payload["items"][0]["serial_numbers"] = ["TIER-001", "TIER-002", "TIER-003"]
         payload["items"][0]["unit_price"] = "999.00"
         response = self.client.post("/api/v1/quotations/", payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -660,8 +781,8 @@ class QuotationApiTests(APITestCase):
         )
         payload = self.payload()
         payload["items"] = [
-            {"product": self.product.id, "quantity": 2},
-            {"product": second_product.id, "quantity": 1},
+            {"product": self.product.id, "quantity": 2, "serial_numbers": ["GROUP-A1", "GROUP-A2"]},
+            {"product": second_product.id, "quantity": 1, "serial_numbers": ["GROUP-B1"]},
         ]
 
         response = self.client.post(
@@ -681,8 +802,8 @@ class QuotationApiTests(APITestCase):
         self.assertEqual(response.data["total"], "54.00")
 
         payload["items"] = [
-            {"product": self.product.id, "quantity": 1},
-            {"product": second_product.id, "quantity": 1},
+            {"product": self.product.id, "quantity": 1, "serial_numbers": ["UPDATE-A1"]},
+            {"product": second_product.id, "quantity": 1, "serial_numbers": ["UPDATE-B1"]},
         ]
         updated = self.client.put(
             f"/api/v1/quotations/{response.data['id']}/",
@@ -874,7 +995,13 @@ class QuotationApiTests(APITestCase):
     def test_static_final_card_uses_free_space_instead_of_creating_extra_page(self):
         payload = self.payload()
         payload["items"] = [
-            {"product": self.product.id, "quantity": quantity}
+            {
+                "product": self.product.id,
+                "quantity": quantity,
+                "serial_numbers": [
+                    f"STATIC-{quantity}-{unit}" for unit in range(1, quantity + 1)
+                ],
+            }
             for quantity in (1, 2, 3)
         ]
         response = self.client.post("/api/v1/quotations/", payload, format="json")

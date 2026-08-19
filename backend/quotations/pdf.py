@@ -292,13 +292,24 @@ def roll_client_block(quotation, section, styles):
 def items_table(quotation, styles, width, roll, items=None):
     items = list(items if items is not None else quotation.items.all())
     compact = roll or width < 115 * mm
+    def product_description(item, font_size):
+        series = ", ".join(escape(str(value)) for value in item.serial_numbers)
+        identification = escape(item.sku)
+        if series:
+            identification += (
+                f" · <font color='#45627F'><b>N.º serie:</b> {series}</font>"
+            )
+        return (
+            f"<b>{escape(item.name)}</b><br/>"
+            f"<font size={font_size}>{identification}</font>"
+        )
     if compact:
         widths = [width * 0.55, width * 0.18, width * 0.27] if width < 55 * mm else [width - 36 * mm, 12 * mm, 24 * mm]
         data = [["Producto", "Cant.", "Total"]]
-        for item in items: data.append([paragraph(f"<b>{item.name}</b><br/><font size=6>{item.sku}</font>", styles["body"]), str(item.quantity), paragraph(money(item.total), styles["right"])])
+        for item in items: data.append([paragraph(product_description(item, 6), styles["body"]), str(item.quantity), paragraph(money(item.total), styles["right"])])
     else:
         data, widths = [["Producto", "Cantidad", "P. unitario", "Importe"]], [width - 90 * mm, 22 * mm, 34 * mm, 34 * mm]
-        for item in items: data.append([paragraph(f"<b>{item.name}</b><br/><font size=7>{item.sku}</font>", styles["body"]), paragraph(str(item.quantity), styles["right"]), paragraph(money(item.unit_price), styles["right"]), paragraph(f"<b>{money(item.total)}</b>", styles["right"])])
+        for item in items: data.append([paragraph(product_description(item, 7), styles["body"]), paragraph(str(item.quantity), styles["right"]), paragraph(money(item.unit_price), styles["right"]), paragraph(f"<b>{money(item.total)}</b>", styles["right"])])
     table = Table(data, colWidths=widths, repeatRows=1, hAlign="LEFT")
     table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), BRAND), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, 0), 7 if compact else 8), ("ALIGN", (1, 0), (-1, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D9E4EC")), ("LEFTPADDING", (0, 0), (-1, -1), 2.5 * mm), ("RIGHTPADDING", (0, 0), (-1, -1), 2.5 * mm), ("TOPPADDING", (0, 1), (-1, -1), 1 * mm), ("BOTTOMPADDING", (0, 1), (-1, -1), 1 * mm)]))
     return table

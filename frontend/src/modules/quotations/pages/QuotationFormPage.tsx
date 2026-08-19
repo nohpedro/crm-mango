@@ -2,6 +2,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Hash,
   History,
   Plus,
   Search,
@@ -10,7 +11,7 @@ import {
   UserPlus,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -36,10 +37,12 @@ type Line = {
   sku: string
   name: string
   quantity: number
+  serialNumbers: string[]
   normal: number
   special: number | null
   final: number
   level: string
+  manualPrice: boolean
 }
 type QuickClientForm = {
   name: string
@@ -91,6 +94,7 @@ export function QuotationFormPage() {
   const canManageTemplates = hasPermission(user, 'quotations.manage_quotation_templates')
   const canViewHistory = hasPermission(user, 'quotations.view_quotation')
   const canCreateClient = hasPermission(user, 'clients.add_client')
+  const canEditItemPrice = hasPermission(user, 'quotations.change_quotation_item_price')
   const quotation = useQuotation(id)
   const mutations = useQuotationMutations()
   const templates = useQuotationTemplates(canConfigureDocument || canManageTemplates)
@@ -151,10 +155,12 @@ export function QuotationFormPage() {
         sku: item.sku,
         name: item.name,
         quantity: item.quantity,
+        serialNumbers: item.serial_numbers,
         normal: Number(item.normal_unit_price),
         special: item.special_unit_price ? Number(item.special_unit_price) : null,
         final: Number(item.unit_price),
         level: item.applied_price_level,
+        manualPrice: item.price_manually_set,
       })),
     )
   }, [quotation.data])
@@ -203,7 +209,7 @@ export function QuotationFormPage() {
               ...line,
               normal: Number(price.normal_unit_price),
               special: price.special_unit_price ? Number(price.special_unit_price) : null,
-              final: Number(price.final_unit_price),
+              final: line.manualPrice ? line.final : Number(price.final_unit_price),
               level: price.price_tier?.label ?? price.price_level?.name ?? '',
             }
           }),
@@ -312,23 +318,68 @@ export function QuotationFormPage() {
       sku: product.sku,
       name: product.name,
       quantity: 1,
+      serialNumbers: [''],
       normal: 0,
       special: null,
       final: 0,
       level: '',
+      manualPrice: false,
     }
     recalculateLines([...lines, line])
     setProductSearch('')
   }
   const updateLine = (index: number, value: number) => {
     const next = lines.map((line, position) =>
-      position === index ? { ...line, quantity: value } : line,
+      position === index
+        ? {
+            ...line,
+            quantity: value,
+            serialNumbers: Array.from(
+              { length: value },
+              (_, serialIndex) => line.serialNumbers[serialIndex] ?? '',
+            ),
+          }
+        : line,
+    )
+    recalculateLines(next)
+  }
+  const updateSerialNumber = (lineIndex: number, serialIndex: number, value: string) =>
+    setLines((current) =>
+      current.map((line, position) =>
+        position === lineIndex
+          ? {
+              ...line,
+              serialNumbers: line.serialNumbers.map((serial, index) =>
+                index === serialIndex ? value : serial,
+              ),
+            }
+          : line,
+      ),
+    )
+  const updateManualPrice = (lineIndex: number, value: number) =>
+    setLines((current) =>
+      current.map((line, position) =>
+        position === lineIndex
+          ? { ...line, final: Math.max(0, value), manualPrice: true }
+          : line,
+      ),
+    )
+  const restoreAutomaticPrice = (lineIndex: number) => {
+    const next = lines.map((line, position) =>
+      position === lineIndex ? { ...line, manualPrice: false } : line,
     )
     recalculateLines(next)
   }
   const submit = () => {
     if (!clientName.trim() || !lines.length) {
       toast.error('Selecciona un cliente y agrega al menos un producto.')
+      return
+    }
+    const serialNumbers = lines.flatMap((line) =>
+      line.serialNumbers.map((serial) => serial.trim()),
+    )
+    if (serialNumbers.some((serial) => !serial)) {
+      toast.error('Registra un número de serie por cada unidad antes de guardar.')
       return
     }
     const payload: QuotationWriteRequest = {
@@ -346,6 +397,10 @@ export function QuotationFormPage() {
       items: lines.map((line) => ({
         product: line.product,
         quantity: line.quantity,
+        serial_numbers: line.serialNumbers.map((serial) => serial.trim()),
+        ...(canEditItemPrice
+          ? { manual_unit_price: line.manualPrice ? line.final : null }
+          : {}),
       })),
     }
     const request = editing
@@ -463,6 +518,10 @@ export function QuotationFormPage() {
             </section>
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="font-bold">2. Agregar productos</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Registra el número de serie físico de cada unidad. Si agregas 3 unidades,
+                aparecerán 3 campos diferentes.
+              </p>
               <div className="relative mt-3">
                 <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-slate-400" />
                 <input
@@ -509,62 +568,159 @@ export function QuotationFormPage() {
                     </thead>
                     <tbody>
                       {lines.map((line, index) => (
-                        <tr key={line.product} className="border-b border-slate-100">
-                          <td className="py-3">
-                            <b>{line.name}</b>
-                            <small className="block font-mono text-slate-500">
-                              {line.sku}
-                            </small>
-                          </td>
-                          <td className="py-3 text-right">{money(line.normal)}</td>
-                          <td className="py-3 text-right">
-                            {line.level ? (
-                              <>
-                                <b className="text-brand-700">{line.level}</b>
-                                <small className="block">
-                                  {money(line.special ?? line.normal)}
-                                </small>
-                              </>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
-                          <td className="py-3 text-right">
-                            <input
-                              aria-label="Cantidad"
-                              type="number"
-                              min="1"
-                              value={line.quantity}
-                              onChange={(event) =>
-                                updateLine(index, Math.max(1, Number(event.target.value)))
-                              }
-                              className="w-16 rounded-lg border px-2 py-1 text-right"
-                            />
-                          </td>
-                          <td className="py-3 text-right font-semibold">
-                            {money(line.final)}
-                          </td>
-                          <td className="py-3 text-right font-bold">
-                            {money(line.final * line.quantity)}
-                            <small className="block font-normal text-emerald-700">
-                              Ahorro {money((line.normal - line.final) * line.quantity)}
-                            </small>
-                          </td>
-                          <td className="py-3 pl-3">
-                            <button
-                              type="button"
-                              aria-label="Quitar producto"
-                              onClick={() =>
-                                recalculateLines(
-                                  lines.filter((_, position) => position !== index),
-                                )
-                              }
-                              className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                            >
-                              <Trash2 className="size-4" />
-                            </button>
-                          </td>
-                        </tr>
+                        <Fragment key={line.product}>
+                          <tr>
+                            <td className="pt-4 align-top">
+                              <b>{line.name}</b>
+                              <small className="block font-mono text-slate-500">
+                                {line.sku}
+                              </small>
+                            </td>
+                            <td className="pt-4 text-right align-top">
+                              {money(line.normal)}
+                            </td>
+                            <td className="pt-4 text-right align-top">
+                              {line.level ? (
+                                <>
+                                  <b className="text-brand-700">{line.level}</b>
+                                  <small className="block">
+                                    {money(line.special ?? line.normal)}
+                                  </small>
+                                </>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                            <td className="pt-4 text-right align-top">
+                              <input
+                                aria-label="Cantidad"
+                                type="number"
+                                min="1"
+                                value={line.quantity}
+                                onChange={(event) =>
+                                  updateLine(
+                                    index,
+                                    Math.max(1, Number(event.target.value)),
+                                  )
+                                }
+                                className="w-16 rounded-lg border px-2 py-1 text-right"
+                              />
+                            </td>
+                            <td className="pt-4 text-right align-top font-semibold">
+                              {canEditItemPrice ? (
+                                <div className="ml-auto w-28">
+                                  <div className="relative">
+                                    <span className="pointer-events-none absolute left-2 top-1.5 text-xs text-slate-400">
+                                      Bs
+                                    </span>
+                                    <input
+                                      aria-label={`Precio unitario final de ${line.name}`}
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={line.final}
+                                      onChange={(event) =>
+                                        updateManualPrice(
+                                          index,
+                                          Number(event.target.value),
+                                        )
+                                      }
+                                      className={`w-full rounded-lg border py-1 pl-7 pr-2 text-right font-semibold outline-none focus:ring-2 ${
+                                        line.manualPrice
+                                          ? 'border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-amber-100'
+                                          : 'border-slate-300 focus:border-brand-500 focus:ring-brand-100'
+                                      }`}
+                                    />
+                                  </div>
+                                  {line.manualPrice ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => restoreAutomaticPrice(index)}
+                                      className="mt-1 text-[11px] font-semibold text-brand-700 hover:underline"
+                                    >
+                                      Usar automático
+                                    </button>
+                                  ) : (
+                                    <small className="mt-1 block text-[11px] font-normal text-slate-500">
+                                      Automático
+                                    </small>
+                                  )}
+                                </div>
+                              ) : (
+                                money(line.final)
+                              )}
+                            </td>
+                            <td className="pt-4 text-right align-top font-bold">
+                              {money(line.final * line.quantity)}
+                              <small className="block font-normal text-emerald-700">
+                                Ahorro {money((line.normal - line.final) * line.quantity)}
+                              </small>
+                            </td>
+                            <td className="pt-3 pl-3 align-top">
+                              <button
+                                type="button"
+                                aria-label="Quitar producto"
+                                onClick={() =>
+                                  recalculateLines(
+                                    lines.filter((_, position) => position !== index),
+                                  )
+                                }
+                                className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              >
+                                <Trash2 className="size-4" />
+                              </button>
+                            </td>
+                          </tr>
+                          <tr className="border-b border-slate-100">
+                            <td colSpan={7} className="pb-4 pt-3">
+                              <div className="rounded-xl border border-brand-100 bg-brand-50/60 p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="grid size-8 place-items-center rounded-lg bg-white text-brand-700 shadow-sm">
+                                      <Hash className="size-4" />
+                                    </span>
+                                    <div>
+                                      <p className="text-xs font-bold text-brand-900">
+                                        Ingrese el N° Serie
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-brand-700">
+                                    {
+                                      line.serialNumbers.filter((serial) => serial.trim())
+                                        .length
+                                    }
+                                    /{line.quantity} completos
+                                  </span>
+                                </div>
+                                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                  {line.serialNumbers.map((serial, serialIndex) => (
+                                    <label
+                                      key={serialIndex}
+                                      className="rounded-lg border border-slate-200 bg-white p-2 text-[11px] font-semibold text-slate-600"
+                                    >
+                                      Unidad {serialIndex + 1}
+                                      <input
+                                        aria-label={`Número de serie ${serialIndex + 1} de ${line.name}`}
+                                        value={serial}
+                                        maxLength={120}
+                                        onChange={(event) =>
+                                          updateSerialNumber(
+                                            index,
+                                            serialIndex,
+                                            event.target.value,
+                                          )
+                                        }
+                                        placeholder="Ingrese el N° Serie"
+                                        className="mt-1.5 w-full rounded-lg border border-slate-300 px-2.5 py-2 font-mono text-xs outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                                      />
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>

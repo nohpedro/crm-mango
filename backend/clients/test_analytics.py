@@ -91,3 +91,37 @@ class ClientAnalyticsTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("fecha inicial", response.data["detail"])
+
+    def test_downloads_filtered_client_report_and_complete_product_list(self):
+        for index in range(12):
+            product = Product.objects.create(
+                category=self.product.category,
+                name=f"Producto adicional {index:02d}",
+                sku=f"ADIC-{index:02d}",
+                normal_unit_price="10.00",
+            )
+            QuotationItem.objects.create(
+                quotation=self.paid,
+                product=product,
+                sku=product.sku,
+                name=product.name,
+                quantity=1,
+                normal_unit_price="10.00",
+                unit_price="10.00",
+            )
+        pdf = self.client.get(
+            f"/api/v1/clients/{self.customer.pk}/analytics-report-pdf/?status=paid"
+        )
+        csv_report = self.client.get(
+            f"/api/v1/clients/{self.customer.pk}/analytics-report-csv/?status=paid"
+        )
+
+        self.assertEqual(pdf.status_code, status.HTTP_200_OK)
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
+        self.assertEqual(csv_report.status_code, status.HTTP_200_OK)
+        content = csv_report.content.decode("utf-8-sig")
+        self.assertIn("Cliente analizado", content)
+        self.assertIn("Producto frecuente", content)
+        self.assertIn("Producto adicional 11", content)
+        self.assertIn("Pagadas", content)
+        self.assertIn("40.00", content)
