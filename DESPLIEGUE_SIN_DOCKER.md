@@ -99,6 +99,28 @@ production/runtime/url-red-local.txt
 La ventana debe permanecer abierta. Para detener el CRM, presiona `Ctrl+C` o
 cierra esa ventana.
 
+## Actualizar el sistema sin Git
+
+Deten el CRM y haz doble clic en `Actualizar CRM IDESEM.bat`, ubicado en la
+carpeta raiz del proyecto. El actualizador descarga directamente la rama
+`produccion` de `nohpedro/crm-mango`; no requiere Git ni vuelve a instalar el
+proyecto desde cero.
+
+La actualizacion agrega y reemplaza archivos, pero no elimina archivos locales.
+Conserva expresamente la base `backend/db.sqlite3`, el contenido de
+`backend/media/`, las variables `.env`, `production/config.psd1` y los secretos
+de `production/runtime/`. Despues actualiza las dependencias, compila la interfaz
+y aplica las migraciones de Django.
+
+Antes de reemplazar archivos guarda una copia en:
+
+```text
+production/runtime/backups/pre-update-FECHA-HORA/
+```
+
+El resultado de la ultima actualizacion queda registrado en
+`production/runtime/last-update.txt`.
+
 ## Mantener siempre la misma URL
 
 Antes de entregar el sistema, asigna un nombre definitivo a la computadora, por
