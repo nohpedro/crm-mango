@@ -16,6 +16,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { PageHeading } from '../../../components/common/PageHeading'
+import { QuotationPaymentDialog } from '../components/QuotationPaymentDialog'
+import { QuotationTransferLink } from '../components/QuotationTransferLink'
 import { useAuthStore } from '../../../store/authStore'
 import { hasPermission } from '../../../utils/permissions'
 import { getAdminErrorMessage } from '../../admin/components/AdminError'
@@ -123,6 +125,7 @@ export function QuotationFormPage() {
   const [validDays, setValidDays] = useState(7)
   const [notes, setNotes] = useState('')
   const [status, setStatus] = useState<QuotationStatus>('pending')
+  const [showPayment, setShowPayment] = useState(false)
   const [quotationDate, setQuotationDate] = useState(localDateValue)
   const [template, setTemplate] = useState<number | null>(null)
   const [lines, setLines] = useState<Line[]>([])
@@ -155,7 +158,10 @@ export function QuotationFormPage() {
         sku: item.sku,
         name: item.name,
         quantity: item.quantity,
-        serialNumbers: item.serial_numbers,
+        serialNumbers: Array.from(
+          { length: item.quantity },
+          (_, index) => item.serial_numbers[index] ?? '',
+        ),
         normal: Number(item.normal_unit_price),
         special: item.special_unit_price ? Number(item.special_unit_price) : null,
         final: Number(item.unit_price),
@@ -378,10 +384,23 @@ export function QuotationFormPage() {
     const serialNumbers = lines.flatMap((line) =>
       line.serialNumbers.map((serial) => serial.trim()),
     )
-    if (serialNumbers.some((serial) => !serial)) {
+    if (status === 'paid' && serialNumbers.some((serial) => !serial)) {
       toast.error('Registra un número de serie por cada unidad antes de guardar.')
       return
     }
+    void saveQuotation(status)
+      .then((created) => {
+        toast.success('Cotización guardada.')
+        navigate(`/quotations/${created.id}`)
+      })
+      .catch((error: unknown) =>
+        toast.error(getAdminErrorMessage(error, 'No se pudo guardar la cotización.')),
+      )
+  }
+  const saveQuotation = (
+    nextStatus: QuotationStatus,
+    series?: Array<{ serial_numbers: string[]; manual_unit_price?: number }>,
+  ) => {
     const payload: QuotationWriteRequest = {
       client: clientId || null,
       client_name: clientName,
@@ -392,37 +411,58 @@ export function QuotationFormPage() {
         ? { template: selectedTemplate, valid_days: validDays }
         : {}),
       notes,
-      status,
+      status: nextStatus,
       quotation_date: quotationDate,
-      items: lines.map((line) => ({
+      items: lines.map((line, index) => ({
         product: line.product,
         quantity: line.quantity,
-        serial_numbers: line.serialNumbers.map((serial) => serial.trim()),
+        serial_numbers:
+          series?.[index].serial_numbers ??
+          line.serialNumbers.map((serial) => serial.trim()).filter(Boolean),
         ...(canEditItemPrice
-          ? { manual_unit_price: line.manualPrice ? line.final : null }
+          ? {
+              manual_unit_price:
+                series?.[index].manual_unit_price ??
+                (line.manualPrice ? line.final : null),
+            }
           : {}),
       })),
     }
-    const request = editing
+    return editing
       ? mutations.update.mutateAsync({ id: id ?? '', payload })
       : mutations.create.mutateAsync(payload)
-    void request
-      .then((created) => {
-        toast.success('Cotización guardada.')
-        navigate(`/quotations/${created.id}`)
-      })
-      .catch((error: unknown) =>
-        toast.error(getAdminErrorMessage(error, 'No se pudo guardar la cotización.')),
-      )
   }
   const pending = mutations.create.isPending || mutations.update.isPending
   return (
     <>
+      {showPayment && (
+        <QuotationPaymentDialog
+          quotation={{
+            id: Number(id) || 0,
+            number: quotation.data?.number ?? 'Nueva cotización',
+            client_name: clientName,
+            items: lines.map((line, index) => ({
+              id: index + 1,
+              name: line.name,
+              sku: line.sku,
+              quantity: line.quantity,
+              serial_numbers: line.serialNumbers,
+              unit_price: String(line.final),
+            })),
+          }}
+          onSave={(entries) => saveQuotation('paid', entries)}
+          onClose={(saved) => {
+            setShowPayment(false)
+            if (saved) navigate(`/quotations/${saved.id}`)
+          }}
+        />
+      )}
       <PageHeading
         title={editing ? 'Editar cotización' : 'Nueva cotización'}
         description="Busca al cliente y los productos; los precios, niveles y totales se calculan solos."
         action={
           <div className="flex flex-wrap gap-2">
+            <QuotationTransferLink />
             {canManageTemplates && (
               <Link
                 to="/quotations/templates"
@@ -519,8 +559,9 @@ export function QuotationFormPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="font-bold">2. Agregar productos</h3>
               <p className="mt-1 text-sm text-slate-500">
-                Registra el número de serie físico de cada unidad. Si agregas 3 unidades,
-                aparecerán 3 campos diferentes.
+                {status === 'paid'
+                  ? 'Registra el número de serie físico de cada unidad. Si agregas 3 unidades, aparecerán 3 campos diferentes.'
+                  : 'Agrega los productos y cantidades. Los números de serie se registran al marcar la cotización como Pagada.'}
               </p>
               <div className="relative mt-3">
                 <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-slate-400" />
@@ -671,55 +712,58 @@ export function QuotationFormPage() {
                               </button>
                             </td>
                           </tr>
-                          <tr className="border-b border-slate-100">
-                            <td colSpan={7} className="pb-4 pt-3">
-                              <div className="rounded-xl border border-brand-100 bg-brand-50/60 p-3">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="grid size-8 place-items-center rounded-lg bg-white text-brand-700 shadow-sm">
-                                      <Hash className="size-4" />
-                                    </span>
-                                    <div>
-                                      <p className="text-xs font-bold text-brand-900">
-                                        Ingrese el N° Serie
-                                      </p>
+                          {status === 'paid' && (
+                            <tr className="border-b border-slate-100">
+                              <td colSpan={7} className="pb-4 pt-3">
+                                <div className="rounded-xl border border-brand-100 bg-brand-50/60 p-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="grid size-8 place-items-center rounded-lg bg-white text-brand-700 shadow-sm">
+                                        <Hash className="size-4" />
+                                      </span>
+                                      <div>
+                                        <p className="text-xs font-bold text-brand-900">
+                                          Ingrese el N° Serie
+                                        </p>
+                                      </div>
                                     </div>
+                                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-brand-700">
+                                      {
+                                        line.serialNumbers.filter((serial) =>
+                                          serial.trim(),
+                                        ).length
+                                      }
+                                      /{line.quantity} completos
+                                    </span>
                                   </div>
-                                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-brand-700">
-                                    {
-                                      line.serialNumbers.filter((serial) => serial.trim())
-                                        .length
-                                    }
-                                    /{line.quantity} completos
-                                  </span>
+                                  <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                    {line.serialNumbers.map((serial, serialIndex) => (
+                                      <label
+                                        key={serialIndex}
+                                        className="rounded-lg border border-slate-200 bg-white p-2 text-[11px] font-semibold text-slate-600"
+                                      >
+                                        Unidad {serialIndex + 1}
+                                        <input
+                                          aria-label={`Número de serie ${serialIndex + 1} de ${line.name}`}
+                                          value={serial}
+                                          maxLength={120}
+                                          onChange={(event) =>
+                                            updateSerialNumber(
+                                              index,
+                                              serialIndex,
+                                              event.target.value,
+                                            )
+                                          }
+                                          placeholder="Ingrese el N° Serie"
+                                          className="mt-1.5 w-full rounded-lg border border-slate-300 px-2.5 py-2 font-mono text-xs outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                                        />
+                                      </label>
+                                    ))}
+                                  </div>
                                 </div>
-                                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                                  {line.serialNumbers.map((serial, serialIndex) => (
-                                    <label
-                                      key={serialIndex}
-                                      className="rounded-lg border border-slate-200 bg-white p-2 text-[11px] font-semibold text-slate-600"
-                                    >
-                                      Unidad {serialIndex + 1}
-                                      <input
-                                        aria-label={`Número de serie ${serialIndex + 1} de ${line.name}`}
-                                        value={serial}
-                                        maxLength={120}
-                                        onChange={(event) =>
-                                          updateSerialNumber(
-                                            index,
-                                            serialIndex,
-                                            event.target.value,
-                                          )
-                                        }
-                                        placeholder="Ingrese el N° Serie"
-                                        className="mt-1.5 w-full rounded-lg border border-slate-300 px-2.5 py-2 font-mono text-xs outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-                                      />
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
+                              </td>
+                            </tr>
+                          )}
                         </Fragment>
                       ))}
                     </tbody>
@@ -761,7 +805,14 @@ export function QuotationFormPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStatus('paid')}
+                  onClick={() => {
+                    if (status === 'paid') return
+                    if (!clientName.trim() || !lines.length) {
+                      toast.error('Selecciona un cliente y agrega al menos un producto.')
+                      return
+                    }
+                    setShowPayment(true)
+                  }}
                   className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
                     status === 'paid'
                       ? 'border-emerald-300 bg-emerald-100 text-emerald-900 ring-2 ring-emerald-100'

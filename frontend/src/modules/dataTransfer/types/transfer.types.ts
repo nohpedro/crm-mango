@@ -1,4 +1,5 @@
-export type TransferResource = 'clients' | 'products' | 'warehouses' | 'stocks'
+export type TransferResource =
+  'clients' | 'products' | 'warehouses' | 'stocks' | 'quotations'
 export type ImportMode = 'partial' | 'total'
 
 export interface ImportErrorRow {

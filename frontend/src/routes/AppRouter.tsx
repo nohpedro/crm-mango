@@ -326,6 +326,16 @@ const appChildren = [
   },
   { path: 'quotations/new', element: <Navigate to="/quotations" replace /> },
   {
+    path: 'quotations/import-export',
+    element: (
+      <PermissionGate
+        anyOf={['quotations.import_quotation', 'quotations.export_quotation']}
+      >
+        <DataTransferPage resource="quotations" />
+      </PermissionGate>
+    ),
+  },
+  {
     path: 'quotations/history',
     element: (
       <PermissionGate anyOf={['quotations.view_quotation']}>

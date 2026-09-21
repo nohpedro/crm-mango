@@ -15,7 +15,7 @@ def _load_openpyxl():
     return openpyxl
 
 
-def read_rows(uploaded_file, expected_headers):
+def read_rows(uploaded_file, expected_headers, date_headers=()):
     filename = (uploaded_file.name or "").lower()
     if not filename.endswith((".xlsx", ".xls")):
         raise ValueError("Solo se permiten archivos .xls o .xlsx.")
@@ -42,6 +42,11 @@ def read_rows(uploaded_file, expected_headers):
             workbook = xlrd.open_workbook(file_contents=raw)
             sheet = workbook.sheet_by_index(0)
             values = [[_cell(sheet.cell_value(row, col)) for col in range(sheet.ncols)] for row in range(sheet.nrows)]
+            for col in range(sheet.ncols):
+                if values and values[0][col] in date_headers:
+                    for row in range(1, sheet.nrows):
+                        if sheet.cell_type(row, col) == xlrd.XL_CELL_DATE:
+                            values[row][col] = xlrd.xldate_as_datetime(sheet.cell_value(row, col), workbook.datemode).date().isoformat()
         except Exception as error:
             raise ValueError("El archivo no es un libro Excel .xls válido.") from error
 
@@ -77,6 +82,11 @@ def write_workbook(headers, rows, file_format="xlsx", instructions=None, sheet_n
         sheet.append(headers)
         for row in rows:
             sheet.append([row.get(header, "") for header in headers])
+        # Imported text must remain text, including values beginning with '='.
+        for row in sheet.iter_rows(min_row=2):
+            for cell in row:
+                if isinstance(cell.value, str):
+                    cell.data_type = "s"
         _style_openpyxl(sheet, len(headers))
         if instructions:
             guide = workbook.create_sheet("Instrucciones")

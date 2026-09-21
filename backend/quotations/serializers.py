@@ -106,8 +106,8 @@ class QuotationItemSerializer(serializers.ModelSerializer):
                 "max_length": "El número de serie no puede superar 120 caracteres.",
             },
         ),
-        required=True,
-        allow_empty=False,
+        required=False,
+        allow_empty=True,
         error_messages={
             "required": "Registra un número de serie por cada unidad.",
             "empty": "Registra un número de serie por cada unidad.",
@@ -150,7 +150,11 @@ class QuotationItemSerializer(serializers.ModelSerializer):
             "serial_numbers",
             getattr(self.instance, "serial_numbers", []),
         )
-        if quantity is not None and len(serial_numbers) != quantity:
+        quotation = getattr(self.root, "instance", None)
+        quotation_status = getattr(self.root, "initial_data", {}).get(
+            "status", getattr(quotation, "status", Quotation.Status.PENDING)
+        )
+        if quotation_status == Quotation.Status.PAID and quantity is not None and len(serial_numbers) != quantity:
             raise serializers.ValidationError({
                 "serial_numbers": (
                     f"Registra exactamente {quantity} número(s) de serie, "
@@ -201,6 +205,9 @@ class QuotationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "template": "No tienes permiso para cambiar la configuración del documento."
             })
+        if attrs.get("status", getattr(self.instance, "status", Quotation.Status.PENDING)) == Quotation.Status.PAID and "items" not in attrs and self.instance:
+            if any(len(item.serial_numbers) != item.quantity or any(not serial.strip() for serial in item.serial_numbers) for item in self.instance.items.all()):
+                raise serializers.ValidationError({"status": "Registra un número de serie por cada unidad antes de marcar la cotización como Pagada. Abre Editar cotización para completarlos."})
         items = attrs.get("items", [])
         if any("manual_unit_price" in item for item in items) and not self._can_change_item_price():
             raise serializers.ValidationError({

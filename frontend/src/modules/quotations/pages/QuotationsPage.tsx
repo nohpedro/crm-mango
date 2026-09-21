@@ -1,4 +1,4 @@
-import { FilePlus2, FileText, Search, UserRoundSearch, X } from 'lucide-react'
+import { FilePlus2, FileText, Pencil, Search, UserRoundSearch, X } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -9,8 +9,10 @@ import { getAdminErrorMessage } from '../../admin/components/AdminError'
 import { useAuthStore } from '../../../store/authStore'
 import { hasAnyPermission, hasPermission } from '../../../utils/permissions'
 import { useQuotationMutations, useQuotations } from '../hooks/useQuotations'
-import type { QuotationStatus } from '../types/quotation.types'
+import type { Quotation, QuotationStatus } from '../types/quotation.types'
+import { QuotationPaymentDialog } from '../components/QuotationPaymentDialog'
 import { useClients } from '../../clients/hooks/useClients'
+import { QuotationTransferLink } from '../components/QuotationTransferLink'
 
 const statusLabel: Record<QuotationStatus, string> = {
   pending: 'Pendiente',
@@ -19,11 +21,13 @@ const statusLabel: Record<QuotationStatus, string> = {
 
 export function QuotationsPage() {
   const user = useAuthStore((state) => state.user)
+  const [paymentQuotation, setPaymentQuotation] = useState<Quotation | null>(null)
   const canChangeStatus = hasAnyPermission(user, [
     'quotations.change_quotation_status',
     'quotations.change_quotation',
   ])
   const canCreate = hasPermission(user, 'quotations.add_quotation')
+  const canEdit = hasPermission(user, 'quotations.change_quotation')
   const canViewClients = hasPermission(user, 'clients.view_client')
   const mutations = useQuotationMutations()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -55,6 +59,12 @@ export function QuotationsPage() {
     setPage(1)
   }
   const changeStatus = (id: string, nextStatus: QuotationStatus) => {
+    if (nextStatus === 'paid') {
+      setPaymentQuotation(
+        quotations.find((quotation) => String(quotation.id) === id) ?? null,
+      )
+      return
+    }
     void mutations.updateStatus
       .mutateAsync({ id, status: nextStatus })
       .then((updatedQuotation) =>
@@ -72,14 +82,23 @@ export function QuotationsPage() {
         title="Historial de cotizaciones"
         description="Consulta las cotizaciones generadas, sus productos, importes, estado y documentos emitidos."
         action={
-          canCreate ? (
-            <Link
-              to="/quotations"
-              className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
-            >
-              <FilePlus2 className="size-4" /> Nueva cotización
-            </Link>
-          ) : null
+          <div className="flex flex-wrap gap-2">
+            <QuotationTransferLink
+              filters={new URLSearchParams({
+                search,
+                status,
+                ...(selectedClient ? { client: selectedClient } : {}),
+              }).toString()}
+            />
+            {canCreate ? (
+              <Link
+                to="/quotations"
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700"
+              >
+                <FilePlus2 className="size-4" /> Nueva cotización
+              </Link>
+            ) : null}
+          </div>
         }
       />
       <section className="mb-4 rounded-2xl border border-brand-100 bg-brand-50/60 p-5">
@@ -258,18 +277,36 @@ export function QuotationsPage() {
               {formatQuotationDate(quotation.quotation_date)}
             </td>
             <td className="px-5 py-4">
-              <Link
-                to={`/quotations/${quotation.id}`}
-                className="inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-900"
-              >
-                <FileText className="size-4" /> Ver
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link
+                  to={`/quotations/${quotation.id}`}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-900"
+                >
+                  <FileText className="size-4" /> Ver
+                </Link>
+                {canEdit && (
+                  <Link
+                    to={`/quotations/${quotation.id}/edit`}
+                    aria-label={`Editar ${quotation.number}`}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-900"
+                  >
+                    <Pencil className="size-4" /> Editar
+                  </Link>
+                )}
+              </div>
             </td>
           </tr>
         ))}
       </AdminTable>
       {query.data && (
         <Pagination page={page} count={query.data.count} onPageChange={setPage} />
+      )}
+      {paymentQuotation && (
+        <QuotationPaymentDialog
+          key={paymentQuotation.id}
+          quotation={paymentQuotation}
+          onClose={() => setPaymentQuotation(null)}
+        />
       )}
     </>
   )

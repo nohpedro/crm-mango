@@ -7,13 +7,15 @@ import type { TransferResource } from '../types/transfer.types'
 export function DataTransferPage({ resource }: { resource: TransferResource }) {
   const location = useLocation()
   const label =
-    resource === 'clients'
-      ? 'clientes'
-      : resource === 'products'
-        ? 'productos'
-        : resource === 'warehouses'
-          ? 'almacenes'
-          : 'vinculaciones de inventario'
+    resource === 'quotations'
+      ? 'cotizaciones'
+      : resource === 'clients'
+        ? 'clientes'
+        : resource === 'products'
+          ? 'productos'
+          : resource === 'warehouses'
+            ? 'almacenes'
+            : 'vinculaciones de inventario'
   const filters = Object.fromEntries(new URLSearchParams(location.search).entries())
   return (
     <>
@@ -23,11 +25,13 @@ export function DataTransferPage({ resource }: { resource: TransferResource }) {
         action={
           <Link
             to={
-              resource === 'clients'
-                ? '/clients'
-                : resource === 'products'
-                  ? '/products'
-                  : '/inventory'
+              resource === 'quotations'
+                ? '/quotations/history'
+                : resource === 'clients'
+                  ? '/clients'
+                  : resource === 'products'
+                    ? '/products'
+                    : '/inventory'
             }
             className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-white"
           >
@@ -39,6 +43,13 @@ export function DataTransferPage({ resource }: { resource: TransferResource }) {
       <section className="rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600 shadow-sm">
         <h3 className="font-bold text-slate-900">Antes de cargar</h3>
         <ul className="mt-2 list-disc space-y-1 pl-5">
+          {resource === 'quotations' && (
+            <li>
+              Una fila por equipo. Repite el código para agrupar una cotización. Si una
+              fila falla, se rechaza toda esa cotización; para corregirla, vuelve a cargar
+              todas sus filas. Los contadores muestran cotizaciones.
+            </li>
+          )}
           <li>Usa exactamente los encabezados de la plantilla y no cambies su orden.</li>
           <li>
             Los registros repetidos dentro del archivo o ya existentes se rechazan para

@@ -7,11 +7,13 @@ import type {
 } from '../types/transfer.types'
 
 const endpoint = (resource: TransferResource) =>
-  resource === 'clients'
-    ? 'clients/'
-    : resource === 'products'
-      ? 'catalog/'
-      : 'inventory/'
+  resource === 'quotations'
+    ? 'quotations/'
+    : resource === 'clients'
+      ? 'clients/'
+      : resource === 'products'
+        ? 'catalog/'
+        : 'inventory/'
 const resourcePath = (resource: TransferResource) =>
   resource === 'warehouses' ? 'warehouses/' : resource === 'stocks' ? 'stocks/' : ''
 
@@ -59,7 +61,9 @@ export const transferService = {
   },
   downloadReport: (resource: TransferResource, errors: unknown[]) => {
     const reportPath =
-      resource === 'clients' || resource === 'products' ? 'report/' : 'transfer/report/'
+      resource === 'clients' || resource === 'products' || resource === 'quotations'
+        ? 'report/'
+        : 'transfer/report/'
     return requestHandler.postDownload(
       `${endpoint(resource)}${reportPath}?resource=${resource}&file_format=xlsx`,
       {

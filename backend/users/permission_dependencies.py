@@ -14,6 +14,8 @@ RESOURCE_DEPENDENCIES = {
 }
 
 PERMISSION_DEPENDENCIES = {
+    "quotations.import_quotation": {"quotations.add_quotation"},
+    "quotations.export_quotation": {"quotations.view_quotation"},
     "quotations.add_quotation": {
         "quotations.view_quotation",
         "clients.view_client",
@@ -53,6 +55,8 @@ ACTION_LABELS = {
 }
 
 CUSTOM_ACTION_LABELS = {
+    "import_quotation": "Importar masivamente",
+    "export_quotation": "Exportar masivamente",
     "change_quotation_status": "Cambiar estado de",
     "change_quotation_item_price": "Editar precios de",
     "configure_quotation_document": "Configurar documento de",

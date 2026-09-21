@@ -18,6 +18,24 @@ const templateFields: Record<
   TransferResource,
   { title: string; required: string[]; optional: string[]; note?: string }
 > = {
+  quotations: {
+    title: 'Plantilla de cotizaciones',
+    required: [
+      'Codigo Cotización',
+      'NIT/CI',
+      'Nombre_cliente',
+      'Fecha_cotizacion',
+      'SKU',
+    ],
+    optional: [
+      'Producto',
+      'Numero_serie',
+      'Precio_unitario_Bs',
+      'Estado',
+      'Observaciones',
+    ],
+    note: 'Numero_serie es obligatorio solo para Pagada. Una fila por equipo. Repite el código, cliente, fecha, estado y observaciones para agrupar equipos. Usa NIT/CI y SKU existentes. La fecha acepta AAAA-MM-DD o DD/MM/AAAA. Precio vacío: cálculo automático; precio explícito: requiere permiso para editar precios. Pagada requiere permiso para cambiar estado. Una cotización con errores se rechaza completa.',
+  },
   clients: {
     title: 'Plantilla de clientes',
     required: [
@@ -54,14 +72,25 @@ const templateFields: Record<
 export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelProps) {
   const user = useAuthStore((state) => state.user)
   const permissionResource = {
+    quotations: 'quotations.quotation',
     clients: 'clients.client',
     products: 'products.product',
     warehouses: 'inventory.warehouse',
     stocks: 'inventory.stock',
   }[resource]
   const [appLabel, model] = permissionResource.split('.')
-  const canImport = hasPermission(user, `${appLabel}.add_${model}`)
-  const canExport = hasPermission(user, `${appLabel}.view_${model}`)
+  const canImport = hasPermission(
+    user,
+    resource === 'quotations'
+      ? 'quotations.import_quotation'
+      : `${appLabel}.add_${model}`,
+  )
+  const canExport = hasPermission(
+    user,
+    resource === 'quotations'
+      ? 'quotations.export_quotation'
+      : `${appLabel}.view_${model}`,
+  )
   const canCreateClientTypes = hasPermission(user, 'clients.add_clienttype')
   const canCreatePriceLevels = hasPermission(user, 'products.add_pricelevel')
   const canCreateCategories = hasPermission(user, 'products.add_category')
@@ -79,13 +108,15 @@ export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelP
   const [createMissingPriceLevels, setCreateMissingPriceLevels] = useState(false)
   const [createMissingCategories, setCreateMissingCategories] = useState(false)
   const label =
-    resource === 'clients'
-      ? 'clientes'
-      : resource === 'products'
-        ? 'productos'
-        : resource === 'warehouses'
-          ? 'almacenes'
-          : 'vinculaciones de inventario'
+    resource === 'quotations'
+      ? 'cotizaciones'
+      : resource === 'clients'
+        ? 'clientes'
+        : resource === 'products'
+          ? 'productos'
+          : resource === 'warehouses'
+            ? 'almacenes'
+            : 'vinculaciones de inventario'
   const validateFile = (candidate: File | null) => {
     if (!candidate) return
     if (!/\.(xlsx|xls)$/i.test(candidate.name)) {
@@ -184,7 +215,7 @@ export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelP
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canExport && (
+          {(canExport || (resource === 'quotations' && canImport)) && (
             <button
               type="button"
               disabled={busy}
@@ -347,7 +378,9 @@ export function DataTransferPanel({ resource, filters = {} }: DataTransferPanelP
           title="¿Procesar este archivo?"
           description={
             mode === 'partial'
-              ? 'Se guardarán únicamente las filas válidas. Las filas con problemas aparecerán en el reporte.'
+              ? resource === 'quotations'
+                ? 'Se guardarán únicamente las cotizaciones completas y válidas. Si una fila falla, se rechaza toda su cotización.'
+                : 'Se guardarán únicamente las filas válidas. Las filas con problemas aparecerán en el reporte.'
               : 'Si existe un solo error, no se guardará ninguna fila del archivo.'
           }
           confirmLabel="Procesar archivo"
@@ -467,8 +500,9 @@ function TemplateDownloadDialog({
           </p>
         )}
         <p className="mt-4 text-xs leading-5 text-slate-500">
-          Esta explicación solo se muestra en el sistema y no se agregará dentro del
-          archivo Excel.
+          {resource === 'quotations'
+            ? 'El archivo incluye una hoja de instrucciones para completar la carga.'
+            : 'Esta explicación solo se muestra en el sistema y no se agregará dentro del archivo Excel.'}
         </p>
         <div className="mt-6 flex justify-end gap-3">
           <button

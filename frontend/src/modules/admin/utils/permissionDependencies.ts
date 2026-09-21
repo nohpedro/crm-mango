@@ -13,6 +13,8 @@ const resourceDependencies: Record<string, string[]> = {
 }
 
 const permissionDependencies: Record<string, string[]> = {
+  'quotations.import_quotation': ['quotations.add_quotation'],
+  'quotations.export_quotation': ['quotations.view_quotation'],
   'quotations.add_quotation': [
     'quotations.view_quotation',
     'clients.view_client',

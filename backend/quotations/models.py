@@ -51,6 +51,7 @@ class Quotation(models.Model):
         PAID = "paid", "Pagada"
 
     number = models.CharField(max_length=24, unique=True, editable=False)
+    import_reference = models.CharField(max_length=100, unique=True, null=True, blank=True, editable=False)
     client = models.ForeignKey(
         Client, null=True, blank=True, on_delete=models.SET_NULL, related_name="quotations"
     )
@@ -84,6 +85,8 @@ class Quotation(models.Model):
             models.Index(fields=["status", "quotation_date"]),
         ]
         permissions = [
+            ("import_quotation", "Puede importar cotizaciones masivamente"),
+            ("export_quotation", "Puede exportar cotizaciones masivamente"),
             (
                 "configure_quotation_document",
                 "Puede acceder a la configuración del documento de cotización",

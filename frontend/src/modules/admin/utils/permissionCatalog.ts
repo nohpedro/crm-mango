@@ -111,6 +111,8 @@ const actionLabels: Record<string, string> = {
 }
 
 const customPermissionLabels: Record<string, string> = {
+  import_quotation: 'Importar masivamente',
+  export_quotation: 'Exportar masivamente',
   configure_quotation_document: 'Configurar documento',
   manage_quotation_templates: 'Administrar plantillas',
   change_quotation_status: 'Cambiar estado',

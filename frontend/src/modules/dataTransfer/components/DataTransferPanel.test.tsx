@@ -1,19 +1,96 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DataTransferPanel } from './DataTransferPanel'
 import { useAuthStore } from '../../../store/authStore'
 import { adminUser } from '../../../test/factories'
+import { transferService } from '../services/transfer.service'
 
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 beforeEach(() => useAuthStore.setState({ status: 'authenticated', user: adminUser }))
 
 describe('DataTransferPanel', () => {
+  it('permite importar cotizaciones sin conceder exportación', async () => {
+    useAuthStore.setState({
+      user: {
+        ...adminUser,
+        is_admin: false,
+        permissions: ['quotations.import_quotation'],
+      },
+    })
+    const user = userEvent.setup()
+    const imported = vi
+      .spyOn(transferService, 'importFile')
+      .mockResolvedValue({ mode: 'partial', created: 1, rejected: 0, errors: [] })
+    const { container } = render(<DataTransferPanel resource="quotations" />)
+    expect(
+      screen.queryByRole('button', { name: 'Exportar Excel' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Descargar plantilla Excel' }),
+    ).toBeInTheDocument()
+    const file = new File(['test'], 'cotizaciones.xlsx')
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [file] },
+    })
+    await user.click(
+      screen.getByRole('button', { name: 'Procesar archivo seleccionado' }),
+    )
+    expect(imported).not.toHaveBeenCalled()
+    expect(
+      screen.getByText(/Si una fila falla, se rechaza toda su cotización/),
+    ).toBeInTheDocument()
+    await user.click(
+      screen.getByRole('button', { name: /^Procesar archivo$/ }),
+    )
+    expect(imported).toHaveBeenCalledWith(
+      'quotations',
+      file,
+      'partial',
+      expect.any(Object),
+    )
+    expect(await screen.findByText(/1 creados/)).toBeInTheDocument()
+  })
+
+  it('permite exportar cotizaciones sin controles de importación', () => {
+    useAuthStore.setState({
+      user: {
+        ...adminUser,
+        is_admin: false,
+        permissions: ['quotations.export_quotation'],
+      },
+    })
+    const { container } = render(<DataTransferPanel resource="quotations" />)
+    expect(screen.getByRole('button', { name: 'Exportar Excel' })).toBeInTheDocument()
+    expect(container.querySelector('input[type="file"]')).toBeNull()
+  })
+
+  it('los permisos ordinarios no conceden transferencia masiva', () => {
+    useAuthStore.setState({
+      user: {
+        ...adminUser,
+        is_admin: false,
+        permissions: ['quotations.view_quotation', 'quotations.add_quotation'],
+      },
+    })
+    render(<DataTransferPanel resource="quotations" />)
+    expect(
+      screen.queryByRole('button', { name: 'Exportar Excel' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Descargar plantilla Excel' }),
+    ).not.toBeInTheDocument()
+  })
+
   it.each([
     ['clients', 'Observaciones'],
     ['products', 'Código de barras'],
     ['warehouses', 'Dirección'],
+    ['quotations', 'Precio_unitario_Bs'],
   ] as const)(
     'explica los campos opcionales antes de descargar la plantilla de %s',
     async (resource, optionalField) => {
@@ -31,7 +108,11 @@ describe('DataTransferPanel', () => {
         ).toBeInTheDocument()
       }
       expect(
-        screen.getByText(/no se agregará dentro del archivo Excel/i),
+        screen.getByText(
+          resource === 'quotations'
+            ? /incluye una hoja de instrucciones/
+            : /no se agregará dentro del archivo Excel/i,
+        ),
       ).toBeInTheDocument()
     },
   )

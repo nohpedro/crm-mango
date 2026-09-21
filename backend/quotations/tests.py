@@ -424,8 +424,87 @@ class QuotationApiTests(APITestCase):
         saved = Quotation.objects.get(pk=response.data["id"]).items.get()
         self.assertEqual(saved.serial_numbers, ["CAL-10-S001", "CAL-10-S002"])
 
+    def test_payment_price_changes_require_permission_and_validate_before_saving(self):
+        created = self.client.post("/api/v1/quotations/", self.payload(), format="json")
+        quotation = Quotation.objects.get(pk=created.data["id"])
+        item = quotation.items.get()
+        url = f"/api/v1/quotations/{quotation.pk}/mark-paid/"
+        data = {"items": [{"id": item.pk, "serial_numbers": ["P1", "P2"], "manual_unit_price": "12.50"}]}
+        self.assertEqual(self.client.post(url, data, format="json").status_code, 403)
+        self.user.role.permissions.add(Permission.objects.get(codename="change_quotation_item_price"))
+        for invalid in ("-1", "1.001", "NaN", "10000000000", ""):
+            data["items"][0]["manual_unit_price"] = invalid
+            self.assertEqual(self.client.post(url, data, format="json").status_code, 400)
+            quotation.refresh_from_db()
+            item.refresh_from_db()
+            self.assertEqual(quotation.status, "pending")
+            self.assertEqual(item.unit_price, Decimal("20"))
+        data["items"][0]["manual_unit_price"] = "0"
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["total"], "0.00")
+        item.refresh_from_db()
+        self.assertTrue(item.price_manually_set)
+        self.assertEqual(item.normal_unit_price, Decimal("20"))
+
+    def test_payment_records_serials_without_repricing_and_uses_status_permission(self):
+        payload = self.payload()
+        payload["items"][0]["serial_numbers"] = []
+        created = self.client.post("/api/v1/quotations/", payload, format="json")
+        quotation = Quotation.objects.get(pk=created.data["id"])
+        item = quotation.items.get()
+        original_price = item.unit_price
+        self.product.normal_unit_price = "999.00"
+        self.product.save()
+        self.user.role.permissions.remove(Permission.objects.get(codename="change_quotation"))
+        self.user.role.permissions.add(Permission.objects.get(codename="change_quotation_status"))
+        url = f"/api/v1/quotations/{quotation.pk}/mark-paid/"
+        response = self.client.post(url, {"items": [{"id": item.pk, "serial_numbers": [" A1 ", "A2"]}], "client_name": "Tampered", "unit_price": 1}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        item.refresh_from_db()
+        quotation.refresh_from_db()
+        self.assertEqual(item.serial_numbers, ["A1", "A2"])
+        self.assertEqual(item.unit_price, original_price)
+        self.assertEqual(quotation.client_name, payload["client_name"])
+        self.assertEqual(quotation.status, "paid")
+        self.assertEqual(self.client.get(f"/api/v1/quotations/{quotation.pk}/pdf/").status_code, 200)
+        self.assertEqual(self.client.post(url, {"items": [{"id": item.pk, "serial_numbers": ["B1", "B2"]}]}, format="json").status_code, 409)
+
+    def test_payment_rejects_invalid_serials_items_and_unauthorized_users(self):
+        created = self.client.post("/api/v1/quotations/", self.payload(), format="json")
+        quotation = Quotation.objects.get(pk=created.data["id"])
+        item = quotation.items.get()
+        url = f"/api/v1/quotations/{quotation.pk}/mark-paid/"
+        for entries in ([], [{"id": item.pk, "serial_numbers": ["A"]}], [{"id": item.pk, "serial_numbers": [" ", "B"]}], [{"id": item.pk + 1000, "serial_numbers": ["A", "B"]}], [{"id": item.pk, "serial_numbers": ["A", "B"]}] * 2):
+            response = self.client.post(url, {"items": entries}, format="json")
+            self.assertEqual(response.status_code, 400, response.data)
+            quotation.refresh_from_db()
+            item.refresh_from_db()
+            self.assertEqual(quotation.status, "pending")
+            self.assertEqual(item.serial_numbers, ["CAL-10-S001", "CAL-10-S002"])
+        self.user.role.permissions.remove(Permission.objects.get(codename="change_quotation"))
+        self.assertEqual(self.client.post(url, {"items": [{"id": item.pk, "serial_numbers": ["A", "B"]}]}, format="json").status_code, 403)
+
+    def test_pending_can_omit_serials_and_paid_requires_them(self):
+        payload = self.payload()
+        payload["items"][0].pop("serial_numbers")
+        response = self.client.post("/api/v1/quotations/", payload, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["items"][0]["serial_numbers"], [])
+        url = f'/api/v1/quotations/{response.data["id"]}/'
+        paid = self.client.patch(url, {"status": "paid"}, format="json")
+        self.assertEqual(paid.status_code, 400)
+        payload["status"] = "paid"
+        payload["items"][0]["serial_numbers"] = ["S1", "S2"]
+        paid = self.client.patch(url, payload, format="json")
+        self.assertEqual(paid.status_code, 200, paid.data)
+        pending = self.client.patch(url, {"status": "pending"}, format="json")
+        self.assertEqual(pending.status_code, 200)
+        self.assertEqual(pending.data["items"][0]["serial_numbers"], ["S1", "S2"])
+
     def test_requires_all_serial_numbers_but_allows_repeated_values(self):
         missing = self.payload()
+        missing["status"] = "paid"
         missing["items"][0]["serial_numbers"] = ["ONLY-ONE"]
         missing_response = self.client.post(
             "/api/v1/quotations/", missing, format="json"

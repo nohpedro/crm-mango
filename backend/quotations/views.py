@@ -1,6 +1,7 @@
 from django.http import HttpResponse
+from django.db import transaction
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import viewsets
+from rest_framework import viewsets, serializers
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -52,6 +53,19 @@ class QuotationTemplateImageViewSet(viewsets.ModelViewSet):
         return [HasRoleModelPermission()]
 
 
+class PaymentItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    manual_unit_price = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, required=False)
+    serial_numbers = serializers.ListField(
+        child=serializers.CharField(max_length=120, allow_blank=False, trim_whitespace=True),
+        allow_empty=False,
+    )
+
+
+class QuotationPaymentSerializer(serializers.Serializer):
+    items = PaymentItemSerializer(many=True, allow_empty=False)
+
+
 class QuotationViewSet(viewsets.ModelViewSet):
     serializer_class = QuotationSerializer
     permission_classes = [HasRoleModelPermission]
@@ -64,6 +78,10 @@ class QuotationViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in {"dashboard", "dashboard_day", "report_pdf", "report_csv"}:
             self.required_permission = "quotations.view_dashboard"
+        elif self.action == "mark_paid":
+            self.required_any_permissions = (
+                "quotations.change_quotation_status", "quotations.change_quotation",
+            )
         elif (
             self.action == "partial_update"
             and "status" in self.request.data
@@ -77,6 +95,38 @@ class QuotationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["post"], url_path="mark-paid")
+    @transaction.atomic
+    def mark_paid(self, request, *args, **kwargs):
+        quotation = self.get_object()
+        quotation = Quotation.objects.select_for_update().get(pk=quotation.pk)
+        if quotation.status != Quotation.Status.PENDING:
+            return Response({"detail": "La cotización ya no está pendiente. Actualiza el historial."}, status=409)
+        payload = QuotationPaymentSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        entries = payload.validated_data["items"]
+        if any("manual_unit_price" in entry for entry in entries) and not HasRoleModelPermission._has_permission(request.user, "quotations.change_quotation_item_price"):
+            return Response({"detail": "No tienes permiso para editar precios unitarios."}, status=403)
+        prices = {entry["id"]: entry["manual_unit_price"] for entry in entries if "manual_unit_price" in entry}
+        items = list(quotation.items.select_for_update())
+        by_id = {entry["id"]: entry["serial_numbers"] for entry in entries}
+        if not items or len(by_id) != len(entries) or set(by_id) != {item.pk for item in items}:
+            return Response({"detail": "Envía una sola entrada por cada producto de esta cotización. Actualiza el historial si cambió."}, status=400)
+        for item in items:
+            if len(by_id[item.pk]) != item.quantity:
+                return Response({"detail": f"{item.name}: registra exactamente {item.quantity} número(s) de serie."}, status=400)
+        for item in items:
+            item.serial_numbers = by_id[item.pk]
+            fields = ["serial_numbers"]
+            if item.pk in prices:
+                item.unit_price = prices[item.pk]
+                item.price_manually_set = True
+                fields.extend(["unit_price", "price_manually_set"])
+            item.save(update_fields=fields)
+        quotation.status = Quotation.Status.PAID
+        quotation.save(update_fields=["status", "updated_at"])
+        return Response(self.get_serializer(quotation).data)
 
     @extend_schema(parameters=[OpenApiParameter(name="paper", type=str, enum=["standard", "roll"])])
     @action(detail=True, methods=["get"])
