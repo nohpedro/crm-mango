@@ -1,4 +1,10 @@
-import { AlertCircle, ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react'
+import {
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  LoaderCircle,
+  SearchX,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 
 interface AdminTableProps {
@@ -21,7 +27,10 @@ export function AdminTable({
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-sm">
+        <table
+          aria-busy={Boolean(loading)}
+          className="data-table min-w-full text-left text-sm"
+        >
           <thead className="border-b border-slate-200 bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               {headers.map((header) => (
@@ -40,7 +49,7 @@ export function AdminTable({
               <tr>
                 <td colSpan={headers.length} className="px-5 py-14 text-center">
                   <LoaderCircle className="mx-auto size-6 animate-spin text-brand-600" />
-                  <span className="mt-2 block text-sm text-slate-500">
+                  <span role="status" className="mt-2 block text-sm text-slate-500">
                     Cargando información…
                   </span>
                 </td>
@@ -50,7 +59,9 @@ export function AdminTable({
               <tr>
                 <td colSpan={headers.length} className="px-5 py-14 text-center">
                   <AlertCircle className="mx-auto size-6 text-red-500" />
-                  <p className="mt-2 text-sm text-red-700">{error}</p>
+                  <p role="alert" className="mt-2 text-sm text-red-700">
+                    {error}
+                  </p>
                   {onRetry && (
                     <button
                       type="button"
@@ -69,7 +80,16 @@ export function AdminTable({
                   colSpan={headers.length}
                   className="px-5 py-14 text-center text-sm text-slate-500"
                 >
-                  No hay registros para los filtros seleccionados.
+                  <SearchX
+                    aria-hidden="true"
+                    className="mx-auto mb-3 size-8 text-slate-400"
+                  />
+                  <p className="font-semibold text-slate-700">
+                    No hay registros para los filtros seleccionados.
+                  </p>
+                  <p className="mt-2 text-xs leading-5">
+                    Prueba otra búsqueda o revisa los filtros aplicados.
+                  </p>
                 </td>
               </tr>
             )}
@@ -96,8 +116,11 @@ export function Pagination({
 }: PaginationProps) {
   const totalPages = Math.max(1, Math.ceil(count / pageSize))
   return (
-    <div className="flex items-center justify-between gap-4 px-1 py-4 text-xs text-slate-500">
-      <span>
+    <nav
+      aria-label="Paginación"
+      className="flex flex-wrap items-center justify-between gap-3 px-1 py-4 text-xs text-slate-500"
+    >
+      <span role="status">
         {count === 0
           ? 'Sin resultados'
           : `${Math.min((page - 1) * pageSize + 1, count)}–${Math.min(page * pageSize, count)} de ${count}`}
@@ -108,9 +131,10 @@ export function Pagination({
           aria-label="Página anterior"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
-          className="rounded-lg border border-slate-200 p-2 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ChevronLeft className="size-4" />
+          <span className="hidden sm:inline">Anterior</span>
         </button>
         <span className="min-w-20 text-center font-semibold text-slate-700">
           Página {page} / {totalPages}
@@ -120,11 +144,12 @@ export function Pagination({
           aria-label="Página siguiente"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
-          className="rounded-lg border border-slate-200 p-2 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40"
         >
+          <span className="hidden sm:inline">Siguiente</span>
           <ChevronRight className="size-4" />
         </button>
       </div>
-    </div>
+    </nav>
   )
 }

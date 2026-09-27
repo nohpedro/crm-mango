@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useIsMutating, useQuery } from '@tanstack/react-query'
 import {
   Bell,
   CircleAlert,
@@ -8,7 +8,7 @@ import {
   Search,
   X,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { navigationGroups } from '../../config/navigation'
@@ -36,6 +36,7 @@ interface NotificationResponse {
 
 export function Header({ onOpenMenu }: HeaderProps) {
   const { pathname } = useLocation()
+  const pendingActions = useIsMutating()
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -71,6 +72,22 @@ export function Header({ onOpenMenu }: HeaderProps) {
     setSearchOpen(true)
   }
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setNotificationsOpen(false)
+        setSearchOpen((value) => !value)
+      }
+      if (event.key === 'Escape') {
+        setSearchOpen(false)
+        setNotificationsOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const goTo = (path: string) => {
     setSearchOpen(false)
     setNotificationsOpen(false)
@@ -97,21 +114,37 @@ export function Header({ onOpenMenu }: HeaderProps) {
             <Breadcrumbs />
           </div>
         </div>
+        {pendingActions > 0 && (
+          <span
+            role="status"
+            className="hidden items-center gap-2 text-xs font-medium text-brand-700 sm:inline-flex"
+          >
+            <RefreshCw aria-hidden="true" className="size-3.5 animate-spin" />
+            Procesando…
+          </span>
+        )}
         <button
           type="button"
+          aria-expanded={searchOpen}
+          aria-keyshortcuts="Control+k Meta+k"
           aria-label="Buscar en el sistema"
-          title="Buscar en el sistema"
+          title="Buscar en el sistema (Ctrl+K / ⌘K)"
           onClick={openSearch}
-          className={`rounded-xl p-2.5 transition ${
+          className={`inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 transition ${
             searchOpen
               ? 'bg-brand-50 text-brand-700'
               : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
           }`}
         >
           <Search className="size-5" />
+          <span className="hidden text-sm font-medium md:inline">Buscar</span>
+          <kbd className="hidden rounded border border-slate-200 px-1.5 text-[10px] text-slate-400 xl:inline">
+            Ctrl K
+          </kbd>
         </button>
         <button
           type="button"
+          aria-expanded={notificationsOpen}
           aria-label="Ver notificaciones"
           title="Ver notificaciones"
           onClick={() => {
@@ -127,7 +160,7 @@ export function Header({ onOpenMenu }: HeaderProps) {
           <Bell className="size-5" />
           {(notifications.data?.count ?? 0) > 0 && (
             <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-black leading-5 text-white ring-2 ring-white">
-              {Math.min(notifications.data?.count ?? 0, 9)}
+              {(notifications.data?.count ?? 0) > 9 ? '9+' : notifications.data?.count}
             </span>
           )}
         </button>
@@ -141,7 +174,7 @@ export function Header({ onOpenMenu }: HeaderProps) {
             onClick={() => setSearchOpen(false)}
             className="fixed inset-0 z-30 cursor-default bg-slate-950/25"
           />
-          <section className="fixed left-1/2 top-24 z-40 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <section className="ui-popover fixed left-1/2 top-24 z-40 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center gap-3 border-b border-slate-100 p-4">
               <Search className="size-5 text-slate-400" />
               <input
@@ -185,7 +218,13 @@ export function Header({ onOpenMenu }: HeaderProps) {
                       </span>
                       <span>
                         <b className="block text-sm text-slate-800">{item.label}</b>
-                        <span className="text-xs text-slate-400">{item.path}</span>
+                        <span className="text-xs text-slate-500">
+                          {
+                            navigationGroups.find((group) =>
+                              group.items.some((entry) => entry.path === item.path),
+                            )?.label
+                          }
+                        </span>
                       </span>
                     </button>
                   )
@@ -208,11 +247,13 @@ export function Header({ onOpenMenu }: HeaderProps) {
             onClick={() => setNotificationsOpen(false)}
             className="fixed inset-0 z-30 cursor-default bg-transparent"
           />
-          <section className="fixed right-4 top-20 z-40 w-[calc(100%-2rem)] max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:right-6 lg:right-8">
+          <section className="ui-popover fixed right-4 top-20 z-40 w-[calc(100%-2rem)] max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:right-6 lg:right-8">
             <div className="flex items-center justify-between border-b border-slate-100 p-4">
               <div>
                 <h2 className="font-bold text-slate-900">Notificaciones</h2>
-                <p className="text-xs text-slate-500">Pendientes que requieren atención.</p>
+                <p className="text-xs text-slate-500">
+                  Pendientes que requieren atención.
+                </p>
               </div>
               <button
                 type="button"

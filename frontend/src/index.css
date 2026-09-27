@@ -26,11 +26,11 @@
 }
 
 /* La cuadrícula de cotizaciones es interna: no se expone como columnas al operador. */
-div[class~="top-[88px]"][class~="z-30"] {
+div[class~='top-[88px]'][class~='z-30'] {
   display: none;
 }
 
-div[class~="cursor-col-resize"] {
+div[class~='cursor-col-resize'] {
   display: none;
 }
 
@@ -62,4 +62,98 @@ a {
 :focus-visible {
   outline: 3px solid rgb(88 123 214 / 35%);
   outline-offset: 2px;
+}
+
+/* Consistent feedback without moving controls or interrupting data entry. */
+@layer base {
+  button:not(:disabled),
+  select:not(:disabled),
+  input[type='checkbox'] {
+    cursor: pointer;
+  }
+  button:disabled,
+  input:disabled,
+  select:disabled {
+    cursor: not-allowed;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+    transition-duration: 160ms;
+    transition-timing-function: ease-out;
+  }
+  input:not([type='checkbox']):not([type='radio']):focus,
+  textarea:focus,
+  select:focus {
+    border-color: var(--color-brand-400);
+    box-shadow: 0 0 0 3px rgb(88 123 214 / 12%);
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--color-brand-600);
+  }
+  ::selection {
+    background: var(--color-brand-200);
+    color: var(--color-brand-900);
+  }
+}
+
+.app-workspace {
+  background: linear-gradient(160deg, #f2f6ff 0, #f8fafc 360px);
+}
+.page-heading {
+  animation: ui-enter 220ms ease-out;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 1.25rem;
+}
+[role='dialog'],
+.ui-popover {
+  animation: ui-enter 180ms ease-out;
+}
+.data-table tbody tr {
+  transition: background-color 140ms ease-out;
+}
+.data-table tbody tr:focus-within {
+  background: var(--color-brand-50);
+}
+@media (hover: hover) {
+  .data-table tbody tr:hover {
+    background: #f8faff;
+  }
+}
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  translate: -50% -200%;
+  z-index: 100;
+  border-radius: 0.75rem;
+  background: white;
+  padding: 0.75rem 1rem;
+  color: var(--color-brand-700);
+  box-shadow: 0 4px 24px #17203320;
+}
+.skip-link:focus {
+  translate: -50% 0;
+}
+@keyframes ui-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

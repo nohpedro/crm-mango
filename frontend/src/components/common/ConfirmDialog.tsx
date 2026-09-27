@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { AlertTriangle, X } from 'lucide-react'
+import { useEffect, useRef, useId } from 'react'
+import { AlertTriangle, LoaderCircle, X } from 'lucide-react'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -24,10 +24,40 @@ export function ConfirmDialog({
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
+  const dialogRef = useRef<HTMLElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
+  const descriptionId = useId()
+  useEffect(() => {
+    if (!open) return
+    const previous = document.activeElement
+    cancelRef.current?.focus()
+    return () => {
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+    }
+  }, [open])
   useEffect(() => {
     if (!open) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !pending) onClose()
+      if (event.key === 'Tab') {
+        const buttons = dialogRef.current?.querySelectorAll<HTMLButtonElement>(
+          'button:not(:disabled)',
+        )
+        if (!buttons?.length) {
+          event.preventDefault()
+          return
+        }
+        const first = buttons[0]
+        const last = buttons[buttons.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -43,9 +73,12 @@ export function ConfirmDialog({
       }}
     >
       <section
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        aria-busy={pending}
         className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -59,13 +92,12 @@ export function ConfirmDialog({
               <AlertTriangle className="size-5" aria-hidden="true" />
             </span>
             <div>
-              <h3
-                id="confirm-dialog-title"
-                className="text-base font-bold text-slate-900"
-              >
+              <h3 id={titleId} className="text-base font-bold text-slate-900">
                 {title}
               </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+              <p id={descriptionId} className="mt-2 text-sm leading-6 text-slate-600">
+                {description}
+              </p>
             </div>
           </div>
           <button
@@ -80,6 +112,7 @@ export function ConfirmDialog({
         </div>
         <div className="mt-6 flex justify-end gap-3">
           <button
+            ref={cancelRef}
             type="button"
             disabled={pending}
             onClick={onClose}
@@ -95,7 +128,12 @@ export function ConfirmDialog({
               danger ? 'bg-red-600 hover:bg-red-700' : 'bg-brand-600 hover:bg-brand-700'
             }`}
           >
-            {pending ? 'Procesando…' : confirmLabel}
+            <span className="inline-flex items-center gap-2">
+              {pending && (
+                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              )}
+              {pending ? 'Procesando…' : confirmLabel}
+            </span>
           </button>
         </div>
       </section>

@@ -98,15 +98,20 @@ export function Sidebar({
           </button>
           <button
             type="button"
-            aria-label={isCollapsed ? 'Expandir menÃº' : 'Contraer menÃº'}
-            title={isCollapsed ? 'Expandir menÃº' : 'Contraer menÃº'}
+            aria-label={isCollapsed ? 'Expandir menú' : 'Contraer menú'}
+            title={isCollapsed ? 'Expandir menú' : 'Contraer menú'}
             className={cn(
               'hidden rounded-lg p-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-white lg:inline-flex',
               isCollapsed ? 'lg:ml-0 lg:p-1.5' : 'ml-auto',
             )}
+            aria-expanded={!isCollapsed}
             onClick={onToggleCollapsed}
           >
-            {isCollapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
+            {isCollapsed ? (
+              <PanelLeftOpen className="size-5" />
+            ) : (
+              <PanelLeftClose className="size-5" />
+            )}
           </button>
         </div>
 
@@ -122,28 +127,30 @@ export function Sidebar({
             )
             if (!visibleItems.length) return null
             return (
-            <div key={group.label} className="mb-6">
-              <p
-                className={cn(
-                  'mb-2 px-3 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400 transition-opacity duration-200',
-                  isCollapsed && 'lg:h-0 lg:overflow-hidden lg:opacity-0',
-                )}
-              >
-                {group.label}
-              </p>
-              <div className="space-y-1">
-                {visibleItems.map((item) => {
+              <div key={group.label} className="mb-6">
+                <p
+                  className={cn(
+                    'mb-2 px-3 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400 transition-opacity duration-200',
+                    isCollapsed && 'lg:h-0 lg:overflow-hidden lg:opacity-0',
+                  )}
+                >
+                  {group.label}
+                </p>
+                <div className="space-y-1">
+                  {visibleItems.map((item) => {
                     const Icon = item.icon
                     return (
                       <NavLink
                         key={item.path}
                         to={item.path}
+                        aria-current={activePath === item.path ? 'page' : false}
                         onClick={onClose}
                         title={isCollapsed ? item.label : undefined}
                         className={() =>
                           cn(
                             'group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm font-medium text-slate-300 transition-all duration-200 hover:translate-x-0.5 hover:bg-white/8 hover:text-white',
-                            isCollapsed && 'lg:justify-center lg:px-2 lg:hover:translate-x-0',
+                            isCollapsed &&
+                              'lg:justify-center lg:px-2 lg:hover:translate-x-0',
                             activePath === item.path &&
                               'border-white/10 bg-brand-500 text-white shadow-sm shadow-brand-950/20',
                           )
@@ -160,7 +167,9 @@ export function Sidebar({
                         <span
                           className={cn(
                             'min-w-0 overflow-hidden whitespace-nowrap transition-all duration-200',
-                            isCollapsed ? 'lg:max-w-0 lg:opacity-0' : 'max-w-44 opacity-100',
+                            isCollapsed
+                              ? 'lg:max-w-0 lg:opacity-0'
+                              : 'max-w-44 opacity-100',
                           )}
                         >
                           {item.label}
@@ -178,8 +187,8 @@ export function Sidebar({
                       </NavLink>
                     )
                   })}
+                </div>
               </div>
-            </div>
             )
           })}
         </nav>

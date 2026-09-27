@@ -18,6 +18,10 @@ const segmentLabels: Record<string, string> = {
   edit: 'Editar',
   prices: 'Precios',
   images: 'Imágenes',
+  templates: 'Plantillas',
+  'import-export': 'Importar / Exportar',
+  stocks: 'Existencias',
+  rules: 'Reglas de precio',
 }
 
 export function Breadcrumbs() {
@@ -27,25 +31,22 @@ export function Breadcrumbs() {
   return (
     <nav
       aria-label="Migas de pan"
-      className="flex items-center gap-1.5 text-xs text-slate-500"
+      className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500"
     >
-      <Link
-        to="/"
-        aria-label="Inicio"
-        className="rounded p-1 hover:text-brand-600"
-      >
+      <Link to="/" aria-label="Inicio" className="rounded p-1 hover:text-brand-600">
         <House className="size-3.5" />
       </Link>
       {segments.map((segment, index) => {
         const path = `/${segments.slice(0, index + 1).join('/')}`
-        const label =
-          segmentLabels[segment] ?? (index === segments.length - 1 ? 'Detalle' : segment)
+        const label = segmentLabels[segment] ?? 'Detalle'
         const isLast = index === segments.length - 1
         return (
           <span key={path} className="flex items-center gap-1.5">
             <ChevronRight className="size-3" aria-hidden="true" />
             {isLast ? (
-              <span className="font-medium text-slate-700">{label}</span>
+              <span aria-current="page" className="font-semibold text-brand-700">
+                {label}
+              </span>
             ) : (
               <Link to={path} className="hover:text-brand-600">
                 {label}

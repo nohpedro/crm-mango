@@ -64,10 +64,14 @@ describe('Sidebar', () => {
     )
 
     expect(screen.getByRole('link', { name: 'Clientes' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Panel principal' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Panel principal' }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Productos' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Usuarios' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Roles y permisos' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Roles y permisos' }),
+    ).not.toBeInTheDocument()
   })
 
   it('muestra el panel principal únicamente con su permiso específico', () => {
@@ -95,6 +99,8 @@ describe('Sidebar', () => {
     )
 
     expect(screen.getByRole('link', { name: 'Panel principal' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Historial de cotizaciones' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Historial de cotizaciones' }),
+    ).not.toBeInTheDocument()
   })
 })

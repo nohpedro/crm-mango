@@ -16,7 +16,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { PageHeading } from '../../../components/common/PageHeading'
-import { QuotationPaymentDialog } from '../components/QuotationPaymentDialog'
 import { QuotationTransferLink } from '../components/QuotationTransferLink'
 import { useAuthStore } from '../../../store/authStore'
 import { hasPermission } from '../../../utils/permissions'
@@ -125,7 +124,6 @@ export function QuotationFormPage() {
   const [validDays, setValidDays] = useState(7)
   const [notes, setNotes] = useState('')
   const [status, setStatus] = useState<QuotationStatus>('pending')
-  const [showPayment, setShowPayment] = useState(false)
   const [quotationDate, setQuotationDate] = useState(localDateValue)
   const [template, setTemplate] = useState<number | null>(null)
   const [lines, setLines] = useState<Line[]>([])
@@ -397,10 +395,7 @@ export function QuotationFormPage() {
         toast.error(getAdminErrorMessage(error, 'No se pudo guardar la cotización.')),
       )
   }
-  const saveQuotation = (
-    nextStatus: QuotationStatus,
-    series?: Array<{ serial_numbers: string[]; manual_unit_price?: number }>,
-  ) => {
+  const saveQuotation = (nextStatus: QuotationStatus) => {
     const payload: QuotationWriteRequest = {
       client: clientId || null,
       client_name: clientName,
@@ -413,17 +408,13 @@ export function QuotationFormPage() {
       notes,
       status: nextStatus,
       quotation_date: quotationDate,
-      items: lines.map((line, index) => ({
+      items: lines.map((line) => ({
         product: line.product,
         quantity: line.quantity,
-        serial_numbers:
-          series?.[index].serial_numbers ??
-          line.serialNumbers.map((serial) => serial.trim()).filter(Boolean),
+        serial_numbers: line.serialNumbers.map((serial) => serial.trim()).filter(Boolean),
         ...(canEditItemPrice
           ? {
-              manual_unit_price:
-                series?.[index].manual_unit_price ??
-                (line.manualPrice ? line.final : null),
+              manual_unit_price: line.manualPrice ? line.final : null,
             }
           : {}),
       })),
@@ -435,28 +426,6 @@ export function QuotationFormPage() {
   const pending = mutations.create.isPending || mutations.update.isPending
   return (
     <>
-      {showPayment && (
-        <QuotationPaymentDialog
-          quotation={{
-            id: Number(id) || 0,
-            number: quotation.data?.number ?? 'Nueva cotización',
-            client_name: clientName,
-            items: lines.map((line, index) => ({
-              id: index + 1,
-              name: line.name,
-              sku: line.sku,
-              quantity: line.quantity,
-              serial_numbers: line.serialNumbers,
-              unit_price: String(line.final),
-            })),
-          }}
-          onSave={(entries) => saveQuotation('paid', entries)}
-          onClose={(saved) => {
-            setShowPayment(false)
-            if (saved) navigate(`/quotations/${saved.id}`)
-          }}
-        />
-      )}
       <PageHeading
         title={editing ? 'Editar cotización' : 'Nueva cotización'}
         description="Busca al cliente y los productos; los precios, niveles y totales se calculan solos."
@@ -805,14 +774,7 @@ export function QuotationFormPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (status === 'paid') return
-                    if (!clientName.trim() || !lines.length) {
-                      toast.error('Selecciona un cliente y agrega al menos un producto.')
-                      return
-                    }
-                    setShowPayment(true)
-                  }}
+                  onClick={() => setStatus('paid')}
                   className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
                     status === 'paid'
                       ? 'border-emerald-300 bg-emerald-100 text-emerald-900 ring-2 ring-emerald-100'
