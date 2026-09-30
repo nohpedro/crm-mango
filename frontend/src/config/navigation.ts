@@ -1,5 +1,6 @@
 import {
   Boxes,
+  Settings,
   ChartNoAxesCombined,
   ContactRound,
   FileText,
@@ -70,6 +71,7 @@ export const navigationGroups: NavigationGroup[] = [
   {
     label: 'Administración',
     items: [
+      { label: 'Configuración', path: '/settings', icon: Settings, adminOnly: true },
       {
         label: 'Plantillas de cotización',
         path: '/quotations/templates',

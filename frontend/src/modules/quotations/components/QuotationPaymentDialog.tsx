@@ -33,19 +33,15 @@ export function QuotationPaymentDialog({
     quotation.items.map((item) => item.unit_price),
   )
   const pricesEnabled = editPrices && canEditPrices
-  const validPrices =
-    !pricesEnabled ||
-    prices.every(
-      (price) => /^\d{1,10}(\.\d{1,2})?$/.test(price) && Number.isFinite(Number(price)),
-    )
+  const subtotals = quotation.items.map((item, index) => {
+    const price = pricesEnabled ? prices[index] : item.unit_price
+    return /^\d{1,10}(\.\d{1,2})?$/.test(price) && Number.isFinite(Number(price))
+      ? Math.round(Number(price) * 100) * item.quantity
+      : null
+  })
+  const validPrices = subtotals.every((subtotal) => subtotal !== null)
   const total =
-    quotation.items.reduce(
-      (sum, item, index) =>
-        sum +
-        Math.round(Number(pricesEnabled ? prices[index] : item.unit_price) * 100) *
-          item.quantity,
-      0,
-    ) / 100
+    subtotals.reduce<number>((sum, subtotal) => sum + (subtotal ?? 0), 0) / 100
   const [items, setItems] = useState(() =>
     quotation.items.map((item) => ({
       id: item.id,
@@ -144,32 +140,60 @@ export function QuotationPaymentDialog({
               <legend className="px-2 text-sm font-bold">
                 {product.name} · {product.sku}
               </legend>
-              {pricesEnabled ? (
-                <label className="mb-3 block text-sm font-semibold">
-                  Precio unitario de {product.name} (Bs)
-                  <input
-                    type="number"
-                    min="0"
-                    max="9999999999.99"
-                    step="0.01"
-                    required
-                    value={prices[index]}
-                    onChange={(event) =>
-                      setPrices((current) =>
-                        current.map((price, position) =>
-                          position === index ? event.target.value : price,
-                        ),
-                      )
-                    }
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                  />
-                </label>
-              ) : (
-                <p className="mb-3 text-sm text-slate-600">
-                  Precio unitario: Bs {Number(product.unit_price).toFixed(2)} · Cantidad:{' '}
-                  {product.quantity}
-                </p>
-              )}
+              <div className="mb-4 grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,1fr)] sm:items-start">
+                {pricesEnabled ? (
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Precio por unidad (Bs)
+                    <input
+                      aria-label={`Precio unitario de ${product.name} (Bs)`}
+                      type="number"
+                      min="0"
+                      max="9999999999.99"
+                      step="0.01"
+                      required
+                      value={prices[index]}
+                      onChange={(event) =>
+                        setPrices((current) =>
+                          current.map((price, position) =>
+                            position === index ? event.target.value : price,
+                          ),
+                        )
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 tabular-nums"
+                    />
+                    <span className="mt-1 block text-xs font-normal text-slate-500">
+                      Se aplica a cada unidad de este producto.
+                    </span>
+                  </label>
+                ) : (
+                  <div>
+                    <p className="text-sm text-slate-600">Precio por unidad</p>
+                    <p className="mt-2 font-semibold tabular-nums">
+                      Bs {Number(product.unit_price).toFixed(2)}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm text-slate-600">Cantidad</p>
+                  <p className="mt-2 font-semibold">
+                    {product.quantity} {product.quantity === 1 ? 'unidad' : 'unidades'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600">Subtotal del producto</p>
+                  <p
+                    aria-label={`Subtotal de ${product.name}`}
+                    className="mt-2 font-bold tabular-nums text-brand-900"
+                  >
+                    {subtotals[index] === null
+                      ? 'Revisa el precio'
+                      : `Bs ${(subtotals[index] / 100).toFixed(2)}`}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Precio por unidad × cantidad
+                  </p>
+                </div>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {items[index].serial_numbers.map((serial, serialIndex) => (
                   <label key={serialIndex} className="text-sm text-slate-700">
@@ -202,10 +226,18 @@ export function QuotationPaymentDialog({
               </div>
             </fieldset>
           ))}
-          <p className="mt-4 text-right font-bold text-brand-900">
-            Total cotización:{' '}
-            {validPrices ? `Bs ${total.toFixed(2)}` : 'Revisa los precios'}
-          </p>
+          <div className="mt-5 rounded-xl border border-brand-100 bg-brand-50 p-4">
+            <p
+              className="text-right text-lg font-bold tabular-nums text-brand-900"
+              role="status"
+            >
+              Total cotización:{' '}
+              {validPrices ? `Bs ${total.toFixed(2)}` : 'Revisa los precios'}
+            </p>
+            <p className="mt-1 text-right text-xs text-slate-600">
+              Suma de los subtotales de todos los productos.
+            </p>
+          </div>
           <label className="mt-4 block text-sm font-semibold">
             Formato de hoja de venta
             <select

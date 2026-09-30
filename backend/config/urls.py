@@ -3,6 +3,7 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
+from idesem.backup_views import BackupExportView, BackupImportView
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularRedocView,
@@ -11,6 +12,8 @@ from drf_spectacular.views import (
 
 
 urlpatterns = [
+    path("api/v1/settings/backup/export/", BackupExportView.as_view()),
+    path("api/v1/settings/backup/import/", BackupImportView.as_view()),
     path(
         "admin/",
         admin.site.urls,

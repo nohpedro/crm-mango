@@ -2,6 +2,7 @@ import { ChevronRight, House } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 
 const segmentLabels: Record<string, string> = {
+  settings: 'Configuración',
   dashboard: 'Panel principal',
   clients: 'Clientes',
   quotations: 'Cotizaciones',

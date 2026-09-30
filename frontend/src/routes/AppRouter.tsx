@@ -12,6 +12,8 @@ import { ProductImagesPage } from '../modules/catalog/pages/ProductImagesPage'
 import { ProductPricesPage } from '../modules/catalog/pages/ProductPricesPage'
 import { PriceLevelRulesPage } from '../modules/catalog/pages/PriceLevelRulesPage'
 import { DataTransferPage } from '../modules/dataTransfer/pages/DataTransferPage'
+import { BackupPage } from '../modules/admin/pages/BackupPage'
+import { AdminRoute } from './AdminRoute'
 import { DashboardPage } from '../modules/dashboard/pages/DashboardPage'
 import { ClientAnalyticsPage } from '../modules/dashboard/pages/ClientAnalyticsPage'
 import { WarehousesPage } from '../modules/inventory/pages/WarehousesPage'
@@ -34,6 +36,7 @@ import { PermissionGate } from './PermissionGate'
 import { HomeRedirect } from './HomeRedirect'
 import { StatusPage } from '../modules/shared/pages/StatusPage'
 const adminChildren = [
+  { element: <AdminRoute />, children: [{ path: 'settings', element: <BackupPage /> }] },
   {
     path: 'users',
     element: (

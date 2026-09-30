@@ -54,10 +54,10 @@ const paid: Quotation = {
   })),
 }
 const close = vi.fn()
-function setup() {
+function setup(value = quotation) {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <QuotationPaymentDialog quotation={quotation} onClose={close} />
+      <QuotationPaymentDialog quotation={value} onClose={close} />
     </QueryClientProvider>,
   )
   return userEvent.setup()
@@ -83,6 +83,38 @@ afterEach(() => {
 })
 
 describe('QuotationPaymentDialog', () => {
+  it('distingue precio unitario, cantidad, subtotales y total con varios productos', async () => {
+    const user = setup({
+      ...quotation,
+      items: [
+        { ...quotation.items[0], quantity: 3, unit_price: '1180.00' },
+        {
+          ...quotation.items[0],
+          id: 4,
+          name: 'Accesorio',
+          quantity: 2,
+          unit_price: '25.00',
+        },
+      ],
+    })
+    expect(screen.getByLabelText('Subtotal de Equipo')).toHaveTextContent('Bs 3540.00')
+    expect(screen.getByLabelText('Subtotal de Accesorio')).toHaveTextContent('Bs 50.00')
+    expect(screen.getByRole('status')).toHaveTextContent('Bs 3590.00')
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Modificar precios de la cotización' }),
+    )
+    const price = screen.getByLabelText('Precio unitario de Equipo (Bs)')
+    expect(price).toHaveValue(1180)
+    expect(screen.getByText('3 unidades')).toBeInTheDocument()
+    await user.clear(price)
+    expect(screen.getByLabelText('Subtotal de Equipo')).toHaveTextContent(
+      'Revisa el precio',
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('Revisa los precios')
+    await user.type(price, '1000.50')
+    expect(screen.getByLabelText('Subtotal de Equipo')).toHaveTextContent('Bs 3001.50')
+    expect(screen.getByRole('status')).toHaveTextContent('Bs 3051.50')
+  })
   it('habilita precios con check, recalcula el total y envía el nuevo precio', async () => {
     const user = setup()
     expect(
